@@ -17,6 +17,7 @@ using Printf, ..AngularMomentum, ..Basics, ..Continuum, ..Defaults, ..Radial, ..
     + photonEnergies                ::Array{Float64,1}    ... List of photon energies [in user-selected units].
     + electronEnergies              ::Array{Float64,1}    ... List of electron energies; usually only one of these lists are utilized.
     + thetas                        ::Array{Float64,1}    ... List of theta-values if angle-differential CS are calculated explicitly.
+    + phis                          ::Array{Float64,1}    ... List of phi]-values if angle-differential CS are calculated explicitly.
     + calcAnisotropy                ::Bool                ... True, if the beta anisotropy parameters are to be calculated and false otherwise (o/w).
     + calcPartialCs                 ::Bool                ... True, if partial cross sections are to be calculated and false otherwise.
     + calcTimeDelay                 ::Bool                ... True, if time-delays are to be calculated and false otherwise.
@@ -34,6 +35,7 @@ struct Settings  <:  AbstractProcessSettings
     photonEnergies                  ::Array{Float64,1}
     electronEnergies                ::Array{Float64,1}
     thetas                          ::Array{Float64,1}
+    phis                            ::Array{Float64,1}
     calcAnisotropy                  ::Bool
     calcPartialCs                   ::Bool
     calcTimeDelay                   ::Bool
@@ -51,7 +53,7 @@ end
 `PhotoIonization.Settings()`  ... constructor for the default values of photoionization line computations
 """
 function Settings()
-    Settings(Basics.EmMultipole[E1], Basics.UseGauge[Basics.UseCoulomb, Basics.UseBabushkin], Float64[], Float64[], Float64[],
+    Settings(Basics.EmMultipole[E1], Basics.UseGauge[Basics.UseCoulomb, Basics.UseBabushkin], Float64[], Float64[], Float64[], Float64[],
                 false, false, false, false, false, false, LineSelection(), Basics.ExpStokes(), 0., [0,1,2,3,4,5])
 end
 
@@ -69,18 +71,20 @@ end
 function Settings(set::PhotoIonization.Settings;
     multipoles::Union{Nothing,Array{EmMultipole,1}}=nothing,                gauges::Union{Nothing,Array{UseGauge,1}}=nothing,
     photonEnergies::Union{Nothing,Array{Float64,1}}=nothing,                electronEnergies::Union{Nothing,Array{Float64,1}}=nothing,
-    thetas::Union{Nothing,Array{Float64,1}}=nothing,                        calcAnisotropy::Union{Nothing,Bool}=nothing,
-    calcPartialCs::Union{Nothing,Bool}=nothing,                             calcTimeDelay::Union{Nothing,Bool}=nothing,
-    calcNonE1AngleDifferentialCS::Union{Nothing,Bool}=nothing,              calcTensors::Union{Nothing,Bool}=nothing,
-    printBefore::Union{Nothing,Bool}=nothing,                               lineSelection::Union{Nothing,LineSelection}=nothing,
-    stokes::Union{Nothing,ExpStokes}=nothing,                               freeElectronShift::Union{Nothing,Float64}=nothing,
-    lValues::Union{Nothing,Array{Int64,1}}=nothing)
+    thetas::Union{Nothing,Array{Float64,1}}=nothing,                        phis::Union{Nothing,Array{Float64,1}}=nothing,
+    calcAnisotropy::Union{Nothing,Bool}=nothing,                            calcPartialCs::Union{Nothing,Bool}=nothing,
+    calcTimeDelay::Union{Nothing,Bool}=nothing,                             calcNonE1AngleDifferentialCS::Union{Nothing,Bool}=nothing,
+    calcTensors::Union{Nothing,Bool}=nothing,                               printBefore::Union{Nothing,Bool}=nothing,
+    lineSelection::Union{Nothing,LineSelection}=nothing,                    stokes::Union{Nothing,ExpStokes}=nothing,
+    freeElectronShift::Union{Nothing,Float64}=nothing,                      lValues::Union{Nothing,Array{Int64,1}}=nothing)
+
 
     if  multipoles        == nothing   multipolesx        = set.multipoles        else  multipolesx        = multipoles         end
     if  gauges            == nothing   gaugesx            = set.gauges            else  gaugesx            = gauges             end
     if  photonEnergies    == nothing   photonEnergiesx    = set.photonEnergies    else  photonEnergiesx    = photonEnergies     end
     if  electronEnergies  == nothing   electronEnergiesx  = set.electronEnergies  else  electronEnergiesx  = electronEnergies   end
     if  thetas            == nothing   thetasx            = set.thetas            else  thetasx            = thetas             end
+    if  phis              == nothing   phisx              = set.phis              else  phisx              = phis               end
     if  calcAnisotropy    == nothing   calcAnisotropyx    = set.calcAnisotropy    else  calcAnisotropyx    = calcAnisotropy     end
     if  calcPartialCs     == nothing   calcPartialCsx     = set.calcPartialCs     else  calcPartialCsx     = calcPartialCs      end
     if  calcTimeDelay     == nothing   calcTimeDelayx     = set.calcTimeDelay     else  calcTimeDelayx     = calcTimeDelay      end
@@ -93,7 +97,7 @@ function Settings(set::PhotoIonization.Settings;
     if  freeElectronShift == nothing   freeElectronShiftx = set.freeElectronShift else  freeElectronShiftx = freeElectronShift  end
     if  lValues           == nothing   lValuesx           = set.lValues           else  lValuesx           = lValues            end
 
-    Settings( multipolesx, gaugesx, photonEnergiesx, electronEnergiesx, thetasx, calcAnisotropyx, calcPartialCsx, calcTimeDelayx,
+    Settings( multipolesx, gaugesx, photonEnergiesx, electronEnergiesx, thetasx, phisx, calcAnisotropyx, calcPartialCsx, calcTimeDelayx,
                 calcNonE1AngleDifferentialCSx, calcTensorsx, printBeforex, lineSelectionx, stokesx, freeElectronShiftx, lValuesx)
 end
 
@@ -105,6 +109,7 @@ function Base.show(io::IO, settings::PhotoIonization.Settings)
     println(io, "photonEnergies:                $(settings.photonEnergies)  ")
     println(io, "electronEnergies:              $(settings.electronEnergies)  ")
     println(io, "thetas:                        $(settings.thetas)  ")
+    println(io, "phis:                          $(settings.phis)  ")
     println(io, "calcAnisotropy:                $(settings.calcAnisotropy)  ")
     println(io, "calcPartialCs:                 $(settings.calcPartialCs)  ")
     println(io, "calcTimeDelay:                 $(settings.calcTimeDelay)  ")
@@ -295,7 +300,7 @@ end
         A neat table is printed for each line but nothing is returned otherwise.
 """
 function computeDisplayNonE1AngleDifferentialCS(stream::IO, lines::Array{PhotoIonization.Line,1}, settings::PhotoIonization.Settings)
-    function spinDensityMatrix(lambda1::Int64, lambda2::Int64 )
+    function spinDensityMatrix(lambda1::Int64, lambda2::Int64, Stokes::ExpStokes)
         # Convert the Stokes parameters of the incoming light into a spin-density matrix on the indices lambda = +-1
         # For linearly polarised light sqrt{S_1^2 + S_2^2 + S_3^2} = 1
         # We take gamma = 0
@@ -338,10 +343,10 @@ function computeDisplayNonE1AngleDifferentialCS(stream::IO, lines::Array{PhotoIo
         # S2 = 0.
         # S3 = 1.
 
-        if      lambda1 == lambda2  == 1               return( (1.0 + S3)/2. )
-        elseif  lambda1 ==  1   &&   lambda2  == -1    return( (S1 - S2*im)/2. )
-        elseif  lambda1 == -1   &&   lambda2  ==  1    return( (S1 + S2*im)/2. )
-        elseif  lambda1 == lambda2  == -1              return( (1.0 - S3)/2. )
+        if      lambda1 == lambda2  == 1               return( (1.0 + Stokes.P3)/2. )
+        elseif  lambda1 ==  1   &&   lambda2  == -1    return( (Stokes.P1 - Stokes.P2*im)/2. )
+        elseif  lambda1 == -1   &&   lambda2  ==  1    return( (Stokes.P1 + Stokes.P2*im)/2. )
+        elseif  lambda1 == lambda2  == -1              return( (1.0 - Stokes.P3)/2. )
         else    error("stop a")
         end
     end
@@ -349,17 +354,25 @@ function computeDisplayNonE1AngleDifferentialCS(stream::IO, lines::Array{PhotoIo
     f = open("Beta-test.dat", "w")
     g = open("DCS-test.dat", "w")
 
+    # Beta, Gamma1, Gamma3, Lambda1, Lambda3, Delta1
+    angularParams = Dict{Float64, Vector{Basics.EmProperty}}()
+
     nx = 50
     # Define the 2x2 spins
     # Loop about all lines; a table is printed independently for each line
+    lineCount = 0;
     for  line in lines
-       @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
-       println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
-       # readline()
+        lineCount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
 
         angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
         sigmaBarC = 0.
         sigmaBarB = 0.
+
+        println( "Line $(lineCount)" )
+        chCount = 0;
 
         for  cha in line.channels
             # println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
@@ -367,40 +380,57 @@ function computeDisplayNonE1AngleDifferentialCS(stream::IO, lines::Array{PhotoIo
                 sigmaBarC += abs( cha.amplitude ) ^ 2
             elseif  cha.gauge == Basics.Babushkin
                 sigmaBarB += abs( cha.amplitude ) ^ 2
+            elseif cha.gauge == Basics.Magnetic
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+                sigmaBarB += abs( cha.amplitude ) ^ 2
             end
         end
-#
+
         # @printf( "sigmaBar (Coulomb)   = %25.10e\n", sigmaBarC )
         # @printf( "sigmaBar (Babushkin) = %25.10e\n", sigmaBarB )
         # println( "==========")
 
-        betaC = 0.
-        betaB = 0.
-
         angCsCoeff =  2. * pi^3 * 137.03599 / ( line.photonEnergy * ( Basics.twice(line.initialLevel.J) + 1 ) )
 
         # Loop over all angles theta, phi
-        for theta in 0:π / 50:2π, phi in 0:π / 50:2π
-            # Loop twice about all channels but distinguish the two gauges
+        for theta in settings.thetas, phi in settings.phis
             csCoulomb = 1.;   csBabushkin = 1.
-            for  cha in line.channels, chb in line.channels
-                if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
-                if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
-                s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
-                s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
-                s1_l   = Subshell( 101, cha.kappa )
-                ell1 = Basics.subshell_l( s1_l )
-                s1_2   = Subshell( 101, chb.kappa )
-                ell2 = Basics.subshell_l( s1_2 )
+            angCsParams = Dict{Tuple, Vector{ComplexF64}}()
+            for  X = 1:20  # Test for triangular conditions for X and continue otherwise
+                # Loop twice about all channels but distinguish the two gauges
+                for  cha in line.channels
+                    for  chb in line.channels
+                        if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+                        if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
 
-                for  X = 1:20  # Test for triangular conditions for X and continue otherwise
-                    if  AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)             &&
-                        AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) &&
-                        AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         &&
-                        mod( ell1 + ell2 + X, 2 ) == 0
+                        s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+                        s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+                        s1_l   = Subshell( 101, cha.kappa )
+                        ell1 = Basics.subshell_l( s1_l )
+                        s1_2   = Subshell( 101, chb.kappa )
+                        ell2 = Basics.subshell_l( s1_2 )
 
-                        #multiply by 2!!!
+                        if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                continue
+                        elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) continue
+                        elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         continue
+                        elseif mod( ell1 + ell2 + X, 2 ) != 0                                               continue
+                        end
 
+                        # Always use key1
+                        key1 = (cha.multipole.L, chb.multipole.L, X, cha.multipole.electric, chb.multipole.electric)
+                        key2 = (chb.multipole.L, cha.multipole.L, X, chb.multipole.electric, cha.multipole.electric)
+
+                        # If both keys are not in the dict, then create Key1.
+                        if !haskey( angCsParams, key1 ) && !haskey( angCsParams, key2 )
+                            angCsParams[ key1 ] = [0.0 + 0.0im, 0.0 + 0.0im]
+                        end
+
+                        # If key2 is in dict, convert key1 to key2
+                        if haskey( angCsParams, key2 )
+                            key1 = key2
+                        end
+
+                        # Multiply by 2, because mu is fixed as 1//2
                         K = 2. * PhotoIonization.angularFunctionK(
                             cha.multipole.L, chb.multipole.L, X,
                             line.initialLevel.J, line.finalLevel.J,
@@ -417,34 +447,86 @@ function computeDisplayNonE1AngleDifferentialCS(stream::IO, lines::Array{PhotoIo
 
                             # PartW = W
 
-                            W = W * spinDensityMatrix(lambda1, lambda2 ) * exp( 1.0im * (lambda1 - lambda2) * phi )
+                            W = W * spinDensityMatrix(lambda1, lambda2, settings.stokes) * exp( 1.0im * (lambda1 - lambda2) * phi )
                             W = W * (1.0im)^(chb.multipole.L - cha.multipole.L) * (lambda1*lambda2) / 2.
                             W = W * AngularMomentum.phaseMultipole(1.0im*lambda1, cha.multipole)
                             W = W * AngularMomentum.phaseMultipole(-1.0im*lambda2, chb.multipole)
 
                             betaPart  = K * W * cha.amplitude * conj( chb.amplitude )
 
-                            if cha.gauge == Basics.Coulomb == chb.gauge
+                            if cha.gauge == Basics.Coulomb || chb.gauge == Basics.Coulomb
                                 csCoulomb += ( betaPart / sigmaBarC )
 
                                 if lambda1 * lambda2 == 1 && theta == phi == 0.
-                                    println("channel1: ", cha.kappa, " ; channel2: ", chb.kappa, " ; mu = ", mu, " ; lambda1 = ", lambda1, " ; lambda2 = ", lambda2, " ; X = ", X)
-                                    println("K = ", K)
-                                    # println("W = ", PartW)
-                                    println(AngularMomentum.Wigner_3j( j2, j1, X, -1/2, 1/2, 0))
-                                    println(ell1)
-                                    println("==============")
-                                    betaC += betaPart
+                                    if ( cha.gauge == Basics.Magnetic || chb.gauge == Basics.Magnetic && cha.gauge != chb.gauge )
+                                        # chCount += 1
+                                        # println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j1)    $(j2)    $(cha.multipole.L)    $(chb.multipole.L)    $(X)    $(cha.multipole.electric)    $(chb.multipole.electric)")
+                                        # println( key1 )
+                                        # println("K = ", K)
+                                        # println("W = ", W)
+                                        # println("KW = ", K * W )
+                                        # println("DD*  = ", cha.amplitude * conj( chb.amplitude ) )
+                                        # println("KWDD*  = ", betaPart )
+                                        # println("==============")
+                                    end
+                                    angCsParams[ key1 ][ 1 ] += ( betaPart / sigmaBarC )
                                 end
 
-                            elseif cha.gauge == Basics.Babushkin == chb.gauge
+                            elseif cha.gauge == Basics.Babushkin || chb.gauge == Basics.Babushkin
                                 csBabushkin += ( betaPart / sigmaBarB )
 
                                 if lambda1 * lambda2 == 1 && theta == phi == 0.
-                                    betaB += betaPart
+                                    angCsParams[ key1 ][ 2 ] += ( betaPart / sigmaBarB )
                                 end
                             end
                         end
+                    end
+                end
+            end
+
+            if theta == phi == 0.0
+                angularParams[line.photonEnergy * 27.2114079527] = [
+                    EmProperty(0.),   # Beta_1
+                    EmProperty(0.),   # Gamma1
+                    EmProperty(0.),   # Gamma3
+                    EmProperty(0.),   # Pi2
+                    EmProperty(0.),   # Pi4
+                    EmProperty(0.),   # Delta1
+                    EmProperty(0.),   # Lambda2
+                    EmProperty(0.),    # Lambda4
+                    EmProperty(0.)    # Upsilon
+                ]
+                for (key, value) in angCsParams
+                    print( f, "$(key[1])        $(key[2])        $(key[3])        $(key[4] ? 1 : 0)        $(key[5] ? 1 : 0)        " )
+                    @printf( f, "%15.5e        %15.5e\n", value[1].re, value[2].re )
+
+                    if key[1] == 1 && key[2] == 1 && key[3] == 2 && key[4] && key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][1] = EmProperty( value[1].re * -2., value[2].re * -2. )
+
+                    elseif key[1] == 1 && key[2] == 2 && key[3] == 1 && key[4] && key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][2] = EmProperty( value[1].re, value[2].re )
+
+                    elseif key[1] == 1 && key[2] == 2 && key[3] == 3 && key[4] && key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][3] = EmProperty( value[1].re, value[2].re )
+
+                    elseif key[1] == 2 && key[2] == 2 && key[3] == 2 && key[4] && key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][4] = EmProperty( value[1].re, value[2].re )
+
+                    elseif key[1] == 2 && key[2] == 2 && key[3] == 4 && key[4] && key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][5] = EmProperty( value[1].re, value[2].re )
+
+                    elseif key[1] == 1 && key[2] == 1 && key[3] == 1 && key[4] && !key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][6] = EmProperty( value[1].re, value[2].re )
+
+                    elseif key[1] == 1 && key[2] == 3 && key[3] == 2 && key[4] && key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][7] = EmProperty( value[1].re, value[2].re )
+
+                    elseif key[1] == 1 && key[2] == 3 && key[3] == 4 && key[4] && key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][8] = EmProperty( value[1].re, value[2].re )
+
+                    elseif key[1] == 1 && key[2] == 2 && key[3] == 2 && key[4] && !key[5]
+                        angularParams[line.photonEnergy * 27.2114079527][9] = EmProperty( value[1].re, value[2].re )
+
                     end
                 end
             end
@@ -456,15 +538,8 @@ function computeDisplayNonE1AngleDifferentialCS(stream::IO, lines::Array{PhotoIo
             @printf( g, "%15.5e\t\t", csCoulomb.re * angCsCoeff )
             @printf( g, "%15.5e\t\t", csBabushkin.re * angCsCoeff )
             @printf( g, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
-
-            if theta == phi == 0.
-                print( f, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
-                @printf( f, "%15.8e        ", line.photonEnergy * 27.2114079527 )
-                @printf( f, "%15.8e        ", betaC.re / sigmaBarC * -2 )
-                @printf( f, "%15.8e\n",       betaB.re / sigmaBarB * -2 )
-            end
         end
-        println()
+        # println()
 
         println( g, "\n" )
 
@@ -487,10 +562,797 @@ function computeDisplayNonE1AngleDifferentialCS(stream::IO, lines::Array{PhotoIo
         # Plot3DGraphDifferentialCrossSection( line, angCS_axis )
     end
 
+    ## We're printing only Beta, Gamma1, Gamma3, Pi2 , Pi4
+    parameterNames = ["Beta_1", "Gamma1", "Gamma3", "Pi2", "Pi4", "Delta1", "Lambda2", "Lambda4", "Upsilon2" ]
+    for p in 1:9
+        nx = 120
+        println(stream, " ")
+        println(stream, "  Angular " * parameterNames[p] * "-parameters for unpolarized target atoms with Ji = 0, 1/2, 1:")
+        println(stream, " ")
+        println(stream, "  ", TableStrings.hLine(nx))
+        sa = "  ";   sb = "  "
+        sa = sa * TableStrings.center(18, "i-level-f"   ; na=0);                       sb = sb * TableStrings.hBlank(18)
+        sa = sa * TableStrings.center(18, "i--J^P--f"   ; na=2);                       sb = sb * TableStrings.hBlank(22)
+        sa = sa * TableStrings.center(12, "f--Energy--i"; na=4)
+        sb = sb * TableStrings.center(12,TableStrings.inUnits("energy"); na=4)
+        sa = sa * TableStrings.center(12, "omega"     ; na=4)
+        sb = sb * TableStrings.center(12, TableStrings.inUnits("energy"); na=4)
+        sa = sa * TableStrings.center(12, "Energy e_p"; na=3)
+        sb = sb * TableStrings.center(12, TableStrings.inUnits("energy"); na=3)
+        sa = sa * TableStrings.center(30, "Cou -- angular " * parameterNames[p] * " -- Bab"; na=3);       sb = sb * TableStrings.hBlank(33)
+        println(stream, sa);    println(stream, sb);    println(stream, "  ", TableStrings.hLine(nx))
+        #
+        for  line in lines
+            sa  = "";    isym = LevelSymmetry( line.initialLevel.J, line.initialLevel.parity)
+                            fsym = LevelSymmetry( line.finalLevel.J,   line.finalLevel.parity)
+            sa = sa * TableStrings.center(18, TableStrings.levels_if(line.initialLevel.index, line.finalLevel.index); na=2)
+            sa = sa * TableStrings.center(18, TableStrings.symmetries_if(isym, fsym); na=3)
+            en = line.finalLevel.energy - line.initialLevel.energy
+            sa = sa * @sprintf("%.6e", Defaults.convertUnits("energy: from atomic", en))                  * "    "
+            sa = sa * @sprintf("%.6e", Defaults.convertUnits("energy: from atomic", line.photonEnergy))   * "    "
+            sa = sa * @sprintf("%.6e", Defaults.convertUnits("energy: from atomic", line.electronEnergy)) * "   "
+            sa = sa * @sprintf("% .6e", angularParams[line.photonEnergy * 27.2114079527][p].Coulomb)     * "   "
+            sa = sa * @sprintf("% .6e", angularParams[line.photonEnergy * 27.2114079527][p].Babushkin)   * "   "
+            println(stream, sa)
+        end
+        println(stream, "  ", TableStrings.hLine(nx))
+    end
+
     close(f)
     close(g)
 
     return( nothing )
+end
+
+function ManualGamma1(lines::Array{PhotoIonization.Line,1})
+    G1 = open("Gamma1.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            # println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Gamma1_C = 0.0 + 0.0im
+        Gamma1_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l   = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2   = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, 1)                continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(1) ) continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(1) )                         continue
+            elseif mod( ell1 + ell2 + 1, 2 ) != 0                                               continue
+            elseif !cha.multipole.electric || !chb.multipole.electric                           continue
+            end
+
+            Gamma1a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Gamma1h = 3.0 * sqrt(15) * sqrt(Gamma1a)
+            Gamma1b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, 1.0, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, 1.0, abs(mu2), -abs(mu1), mu2-mu1)
+            Gamma1c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, 1, j1, j2, line.finalLevel.J)
+            Gamma1d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, 1, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Gamma1e = (1.0im)^(chb.multipole.L - cha.multipole.L )
+            Gamma1f = cha.amplitude * conj( chb.amplitude )
+            Gamma1g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+
+
+            # if ( cha.gauge == chb.gauge == Basics.Coulomb )
+            #     chCount += 1
+            #     println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j2)    $(j1)")
+            #     println(Gamma1a)
+            #     println(Gamma1b)
+            #     println(Gamma1c)
+            #     println(Gamma1d)
+            #     println(Gamma1e)
+            #     println(Gamma1f)
+            #     println(Gamma1g)
+            #     println(Gamma1a * Gamma1b * Gamma1c * Gamma1d * Gamma1e * Gamma1f * Gamma1g / sigmaBarC)
+            #     println("----------------------")
+            # end
+
+            if ( cha.gauge == chb.gauge == Basics.Coulomb )
+                Gamma1_C += ( Gamma1h * Gamma1b * Gamma1c * Gamma1d * Gamma1e * Gamma1f * Gamma1g )
+
+            elseif ( cha.gauge == chb.gauge == Basics.Babushkin )
+                Gamma1_B += ( Gamma1h * Gamma1b * Gamma1c * Gamma1d * Gamma1e * Gamma1f * Gamma1g )
+            end
+        end
+
+        print( G1, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( G1, "%15.5e\t\t", Gamma1_C.re/sigmaBarC )
+        @printf( G1, "%15.5e\t\t", Gamma1_B.re/sigmaBarB )
+        @printf( G1, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(G1)
+end
+
+function ManualGamma3(lines::Array{PhotoIonization.Line,1})
+    G3 = open("Gamma3.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    X = 3
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            # println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Gamma3_C = 0.0 + 0.0im
+        Gamma3_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l   = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2   = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         continue
+            elseif mod( ell1 + ell2 + X, 2 ) != 0                                               continue
+            elseif !cha.multipole.electric || !chb.multipole.electric                           continue
+            end
+
+            Gamma3a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Gamma3h = (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Gamma3a)
+            Gamma3b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, X, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, X, abs(mu2), -abs(mu1), mu2-mu1)
+            Gamma3c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, j1, j2, line.finalLevel.J)
+            Gamma3d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Gamma3e = (1.0im)^(chb.multipole.L - cha.multipole.L )
+            Gamma3f = cha.amplitude * conj( chb.amplitude )
+            Gamma3g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+
+            # if ( cha.gauge == chb.gauge == Basics.Coulomb )
+            #     chCount += 1
+            #     println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j2)    $(j1)")
+            #     println(Basics.twice(j1)+1)
+            #     println(Basics.twice(j2)+1)
+            #     println((Basics.twice(cha.symmetry.J)+1))
+            #     println((Basics.twice(chb.symmetry.J)+1))
+            #     println(3.0 * sqrt(15) * sqrt(Gamma3a))
+            #     println(Gamma3c)
+            #     println(Gamma3d)
+            #     println("K = ", 3.0 * sqrt(15) * sqrt(Gamma3a) * Gamma3c * Gamma3d)
+            #     println("W = ", Gamma3b * Gamma3e)
+            #     println(" D * Ddash")
+            #     println(Gamma3f)
+            #     println(Gamma3g)
+            #     println("----------------------")
+            # end
+
+            if ( cha.gauge == chb.gauge == Basics.Coulomb )
+                Gamma3_C += ( Gamma3h * Gamma3b * Gamma3c * Gamma3d * Gamma3e * Gamma3f * Gamma3g )
+
+            elseif ( cha.gauge == chb.gauge == Basics.Babushkin )
+                Gamma3_B += ( Gamma3h * Gamma3b * Gamma3c * Gamma3d * Gamma3e * Gamma3f * Gamma3g )
+            end
+        end
+
+        print( G3, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( G3, "%15.5e\t\t", Gamma3_C.re / sigmaBarC )
+        @printf( G3, "%15.5e\t\t", Gamma3_B.re / sigmaBarB )
+        @printf( G3, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(G3)
+end
+
+function ManualPi2(lines::Array{PhotoIonization.Line,1})
+    P2 = open("Pi2.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    X = 2
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            # println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Pi2_C = 0.0 + 0.0im
+        Pi2_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l   = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2   = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         continue
+            elseif mod( ell1 + ell2 + X, 2 ) != 0                                               continue
+            elseif cha.multipole.L == chb.multipole.L != 2                                      continue
+            elseif !cha.multipole.electric || !chb.multipole.electric                           continue
+            end
+
+            Pi2a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Pi2h = (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi2a)
+            Pi2b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, X, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, X, abs(mu2), -abs(mu1), mu2-mu1)
+            Pi2c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, j1, j2, line.finalLevel.J)
+            Pi2d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Pi2e = (1.0im)^(chb.multipole.L - cha.multipole.L )
+            Pi2f = cha.amplitude * conj( chb.amplitude )
+            Pi2g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+
+            # if ( cha.gauge == chb.gauge == Basics.Coulomb )
+            #     chCount += 1
+            #     println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j2)    $(j1)")
+            #     println(2X+1)
+            #     println("L1 = ", cha.multipole.L)
+            #     println("L2 = ", chb.multipole.L )
+            #     println(sqrt(2(cha.multipole.L)+1) )
+            #     println(sqrt(2chb.multipole.L+1))
+            #     println(Basics.twice(j1)+1)
+            #     println(Basics.twice(j2)+1)
+            #     println((Basics.twice(cha.symmetry.J)+1))
+            #     println((Basics.twice(chb.symmetry.J)+1))
+            #     println( (2X + 1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi2a))
+            #     println(Pi2c)
+            #     println(Pi2d)
+            #     println("K = ", (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi2a) * Pi2c * Pi2d)
+            #     println("W = ", Pi2b * Pi2e)
+            #     println(" D * Ddash")
+            #     println(Pi2f)
+            #     println(Pi2g)
+            #     println("----------------------")
+            # end
+
+            if ( cha.gauge == chb.gauge == Basics.Coulomb )
+                Pi2_C += ( Pi2h * Pi2b * Pi2c * Pi2d * Pi2e * Pi2f * Pi2g )
+
+            elseif ( cha.gauge == chb.gauge == Basics.Babushkin )
+                Pi2_B += ( Pi2h * Pi2b * Pi2c * Pi2d * Pi2e * Pi2f * Pi2g )
+            end
+        end
+
+        print( P2, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( P2, "%15.5e\t\t", Pi2_C.re / sigmaBarC )
+        @printf( P2, "%15.5e\t\t", Pi2_B.re / sigmaBarB )
+        @printf( P2, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(P2)
+end
+
+function ManualPi4(lines::Array{PhotoIonization.Line,1})
+    P4 = open("Pi4.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    X = 4
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            # println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Pi4_C = 0.0 + 0.0im
+        Pi4_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l   = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2   = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         continue
+            elseif mod( ell1 + ell2 + X, 2 ) != 0                                               continue
+            elseif cha.multipole.L == chb.multipole.L != 2                                      continue
+            elseif !cha.multipole.electric || !chb.multipole.electric                           continue
+            end
+
+            Pi4a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Pi4h = (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi4a)
+            Pi4b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, X, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, X, abs(mu2), -abs(mu1), mu2-mu1)
+            Pi4c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, j1, j2, line.finalLevel.J)
+            Pi4d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Pi4e = (1.0im)^(chb.multipole.L - cha.multipole.L )
+            Pi4f = cha.amplitude * conj( chb.amplitude )
+            Pi4g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+
+            # if ( cha.gauge == chb.gauge == Basics.Coulomb )
+            #     chCount += 1
+            #     println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j2)    $(j1)")
+            #     println(Basics.twice(j1)+1)
+            #     println(Basics.twice(j2)+1)
+            #     println((Basics.twice(cha.symmetry.J)+1))
+            #     println((Basics.twice(chb.symmetry.J)+1))
+            #     println(3.0 * sqrt(15) * sqrt(Gamma3a))
+            #     println(Gamma3c)
+            #     println(Gamma3d)
+            #     println("K = ", 3.0 * sqrt(15) * sqrt(Gamma3a) * Gamma3c * Gamma3d)
+            #     println("W = ", Gamma3b * Gamma3e)
+            #     println(" D * Ddash")
+            #     println(Gamma3f)
+            #     println(Gamma3g)
+            #     println("----------------------")
+            # end
+
+            if ( cha.gauge == chb.gauge == Basics.Coulomb )
+                Pi4_C += ( Pi4h * Pi4b * Pi4c * Pi4d * Pi4e * Pi4f * Pi4g )
+
+            elseif ( cha.gauge == chb.gauge == Basics.Babushkin )
+                Pi4_B += ( Pi4h * Pi4b * Pi4c * Pi4d * Pi4e * Pi4f * Pi4g )
+            end
+        end
+
+        print( P4, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( P4, "%15.5e\t\t", Pi4_C.re / sigmaBarC )
+        @printf( P4, "%15.5e\t\t", Pi4_B.re / sigmaBarB )
+        @printf( P4, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(P4)
+end
+
+function ManualDelta1(lines::Array{PhotoIonization.Line,1})
+    D1 = open("Delta1.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    X = 1
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Delta1_C = 0.0 + 0.0im
+        Delta1_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2 = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                     continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) )      continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                              continue
+            elseif mod( ell1 + ell2 + X, 2 ) != 0                                                    continue
+            elseif cha.multipole.L == chb.multipole.L != 1                                           continue
+            elseif cha.multipole.electric == chb.multipole.electric                                  continue
+            end
+
+            Delta1a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Delta1h = (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Delta1a)
+            Delta1b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, X, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, X, abs(mu2), -abs(mu1), mu2-mu1)
+            Delta1c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, j1, j2, line.finalLevel.J)
+            Delta1d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Delta1e = (1.0im)^(chb.multipole.L - cha.multipole.L)
+            Delta1f = cha.amplitude * conj( chb.amplitude )
+            Delta1g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+            Delta1i = (-1) ^ ( cha.multipole.electric ? 1 : 0 )
+
+            if ( cha.gauge == Basics.Coulomb || chb.gauge == Basics.Coulomb )
+                chCount += 1
+                # println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j1)    $(j2)    $(cha.multipole.L)    $(chb.multipole.L)    $(cha.multipole.electric)    $(chb.multipole.electric)")
+                # println(2X+1)
+                # println(sqrt(2cha.multipole.L+1))
+                # println(sqrt(2chb.multipole.L+1))
+                # println(Basics.twice(j1)+1)
+                # println(Basics.twice(j2)+1)
+                # println((Basics.twice(cha.symmetry.J)+1))
+                # println((Basics.twice(chb.symmetry.J)+1))
+                # println((2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Delta1a))
+                # println(Delta1b)
+                # println(Delta1c)
+                # println(Delta1d)
+                # println("K = ", (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Delta1a) * Delta1c * Delta1d)
+                # println("W = ", Delta1b * Delta1e)
+                # println("DD* ", Delta1f)
+                # println("KWDD* = ", Delta1h * Delta1b * Delta1c * Delta1d * Delta1e * Delta1f * Delta1g)
+                # println("----------------------")
+                Delta1_C += ( Delta1h * Delta1b * Delta1c * Delta1d * Delta1e * Delta1f * Delta1g * Delta1i )
+
+            elseif ( cha.gauge == Basics.Babushkin || chb.gauge == Basics.Babushkin )
+                Delta1_B += ( Delta1h * Delta1b * Delta1c * Delta1d * Delta1e * Delta1f * Delta1g * Delta1i )
+
+            end
+        end
+
+        print( D1, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( D1, "%15.5e\t\t", Delta1_C.im / sigmaBarC )
+        @printf( D1, "%15.5e\t\t", Delta1_B.im / sigmaBarB )
+        @printf( D1, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(D1)
+end
+
+function ManualLambda2(lines::Array{PhotoIonization.Line,1})
+    L2 = open("Lambda2.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    X = 2
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            # println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Lambda2_C = 0.0 + 0.0im
+        Lambda2_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l   = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2   = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         continue
+            elseif mod( ell1 + ell2 + X, 2 ) != 0                                               continue
+            elseif cha.multipole.L * chb.multipole.L != 3                                       continue
+            elseif !cha.multipole.electric || !chb.multipole.electric                           continue
+            end
+
+            Lambda2a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Lambda2h = (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Lambda2a)
+            Lambda2b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, X, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, X, abs(mu2), -abs(mu1), mu2-mu1)
+            Lambda2c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, j1, j2, line.finalLevel.J)
+            Lambda2d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Lambda2e = (1.0im)^(chb.multipole.L - cha.multipole.L )
+            Lambda2f = cha.amplitude * conj( chb.amplitude )
+            Lambda2g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+
+            # if ( cha.gauge == chb.gauge == Basics.Coulomb )
+            #     chCount += 1
+            #     println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j2)    $(j1)")
+            #     println(2X+1)
+            #     println("L1 = ", cha.multipole.L)
+            #     println("L2 = ", chb.multipole.L )
+            #     println(sqrt(2(cha.multipole.L)+1) )
+            #     println(sqrt(2chb.multipole.L+1))
+            #     println(Basics.twice(j1)+1)
+            #     println(Basics.twice(j2)+1)
+            #     println((Basics.twice(cha.symmetry.J)+1))
+            #     println((Basics.twice(chb.symmetry.J)+1))
+            #     println( (2X + 1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi2a))
+            #     println(Pi2c)
+            #     println(Pi2d)
+            #     println("K = ", (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi2a) * Pi2c * Pi2d)
+            #     println("W = ", Pi2b * Pi2e)
+            #     println(" D * Ddash")
+            #     println(Pi2f)
+            #     println(Pi2g)
+            #     println("----------------------")
+            # end
+
+            if ( cha.gauge == chb.gauge == Basics.Coulomb )
+                Lambda2_C += ( Lambda2h * Lambda2b * Lambda2c * Lambda2d * Lambda2e * Lambda2f * Lambda2g )
+
+            elseif ( cha.gauge == chb.gauge == Basics.Babushkin )
+                Lambda2_B += ( Lambda2h * Lambda2b * Lambda2c * Lambda2d * Lambda2e * Lambda2f * Lambda2g )
+            end
+        end
+
+        print( L2, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( L2, "%15.5e\t\t", Lambda2_C.re / sigmaBarC )
+        @printf( L2, "%15.5e\t\t", Lambda2_B.re / sigmaBarB )
+        @printf( L2, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(L2)
+end
+
+function ManualLambda4(lines::Array{PhotoIonization.Line,1})
+    L4 = open("Lambda4.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    X = 4
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            # println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Lambda4_C = 0.0 + 0.0im
+        Lambda4_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l   = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2   = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         continue
+            elseif mod( ell1 + ell2 + X, 2 ) != 0                                               continue
+            elseif cha.multipole.L * chb.multipole.L != 3                                     continue
+            elseif !cha.multipole.electric || !chb.multipole.electric                           continue
+            end
+
+            Lambda4a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Lambda4h = (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Lambda4a)
+            Lambda4b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, X, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, X, abs(mu2), -abs(mu1), mu2-mu1)
+            Lambda4c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, j1, j2, line.finalLevel.J)
+            Lambda4d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Lambda4e = (1.0im)^(chb.multipole.L - cha.multipole.L )
+            Lambda4f = cha.amplitude * conj( chb.amplitude )
+            Lambda4g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+
+            # if ( cha.gauge == chb.gauge == Basics.Coulomb )
+            #     chCount += 1
+            #     println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j2)    $(j1)")
+            #     println(Basics.twice(j1)+1)
+            #     println(Basics.twice(j2)+1)
+            #     println((Basics.twice(cha.symmetry.J)+1))
+            #     println((Basics.twice(chb.symmetry.J)+1))
+            #     println(3.0 * sqrt(15) * sqrt(Gamma3a))
+            #     println(Gamma3c)
+            #     println(Gamma3d)
+            #     println("K = ", 3.0 * sqrt(15) * sqrt(Gamma3a) * Gamma3c * Gamma3d)
+            #     println("W = ", Gamma3b * Gamma3e)
+            #     println(" D * Ddash")
+            #     println(Gamma3f)
+            #     println(Gamma3g)
+            #     println("----------------------")
+            # end
+
+            if ( cha.gauge == chb.gauge == Basics.Coulomb )
+                Lambda4_C += ( Lambda4h * Lambda4b * Lambda4c * Lambda4d * Lambda4e * Lambda4f * Lambda4g )
+
+            elseif ( cha.gauge == chb.gauge == Basics.Babushkin )
+                Lambda4_B += ( Lambda4h * Lambda4b * Lambda4c * Lambda4d * Lambda4e * Lambda4f * Lambda4g )
+            end
+        end
+
+        print( L4, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( L4, "%15.5e\t\t", Lambda4_C.re / sigmaBarC )
+        @printf( L4, "%15.5e\t\t", Lambda4_B.re / sigmaBarB )
+        @printf( L4, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(L4)
+end
+
+function ManualUpsilon2(lines::Array{PhotoIonization.Line,1})
+    U2 = open("Upsilon2.dat", "w")
+
+    mu1 = mu2 = 1//2
+
+    X = 2
+    lcount = 0
+    for  line in lines
+        lcount += 1
+        # @printf( "Working on energy, E = %0.5F H; ", line.photonEnergy )
+        # println( "$(line.initialLevel.J) -- $(line.finalLevel.J)" )
+        # readline()
+
+        angCS = Tuple{AngularJ64, Float64, Float64, ComplexF64, ComplexF64}[]  # finalLevel.J, theta, phi, angCs.Coulomb, angCs.Babushkin
+        sigmaBarC = 0.
+        sigmaBarB = 0.
+
+        for  cha in line.channels
+            println( "Amplitude ", abs( cha.amplitude ) ^ 2, "gauge ", cha.gauge, "kappa ", cha.kappa )
+            if  cha.gauge == Basics.Coulomb
+                sigmaBarC += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            elseif  cha.gauge == Basics.Babushkin
+                sigmaBarB += abs( cha.amplitude ) ^ 2
+            end
+        end
+
+        Upsilon2_C = 0.0 + 0.0im
+        Upsilon2_B = 0.0 + 0.0im
+        println( "Line $(lcount)" )
+        chCount = 0
+        for  cha in line.channels, chb in line.channels
+            if  cha.gauge == Basics.Coulomb  &&   chb.gauge == Basics.Babushkin   continue    end
+            if  chb.gauge == Basics.Coulomb  &&   cha.gauge == Basics.Babushkin   continue    end
+            s1 = Subshell(20,cha.kappa);   j1 = Basics.subshell_j(s1)
+            s2 = Subshell(20,chb.kappa);   j2 = Basics.subshell_j(s2)
+            s1_l   = Subshell( 101, cha.kappa )
+            ell1 = Basics.subshell_l( s1_l )
+            s1_2   = Subshell( 101, chb.kappa )
+            ell2 = Basics.subshell_l( s1_2 )
+
+            if  !AngularMomentum.isTriangle(cha.multipole.L, chb.multipole.L, X)                continue
+            elseif !AngularMomentum.isTriangle(cha.symmetry.J,  chb.symmetry.J, AngularJ64(X) ) continue
+            elseif !AngularMomentum.isTriangle(j1,  j2, AngularJ64(X) )                         continue
+            elseif mod( ell1 + ell2 + X, 2 ) != 0                                               continue
+            elseif (cha.multipole.L != 1 || !cha.multipole.electric )                           continue
+            elseif (chb.multipole.L != 2 || chb.multipole.electric )                            continue
+            end
+
+            Upsilon2a = (Basics.twice(j1)+1) * (Basics.twice(cha.symmetry.J)+1) * (Basics.twice(j2)+1) * (Basics.twice(chb.symmetry.J)+1 )
+            Upsilon2h = (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Upsilon2a)
+            Upsilon2b = AngularMomentum.Wigner_3j(chb.multipole.L, cha.multipole.L, X, -1.0, 1.0, 0) * AngularMomentum.Wigner_3j(j2, j1, X, abs(mu2), -abs(mu1), mu2-mu1)
+            Upsilon2c = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, j1, j2, line.finalLevel.J)
+            Upsilon2d = AngularMomentum.Wigner_6j(chb.symmetry.J, cha.symmetry.J, X, cha.multipole.L, chb.multipole.L, line.initialLevel.J)
+            Upsilon2e = (1.0im)^(chb.multipole.L - cha.multipole.L )
+            Upsilon2f = cha.amplitude * conj( chb.amplitude )
+            Upsilon2g = AngularMomentum.phaseFactor([line.initialLevel.J, -1, line.finalLevel.J, 1, AngularJ64(1//2)])
+            Upsilon2i = (-1im) ^ ( chb.multipole.electric ? 1 : 0 ) * (1im) ^ ( cha.multipole.electric ? 1 : 0 )
+
+            # if ( cha.gauge == chb.gauge == Basics.Coulomb )
+            #     chCount += 1
+            #     println("$(chCount) =>    $(cha.kappa)  --  $(chb.kappa)    $(j2)    $(j1)")
+            #     println(2X+1)
+            #     println("L1 = ", cha.multipole.L)
+            #     println("L2 = ", chb.multipole.L )
+            #     println(sqrt(2(cha.multipole.L)+1) )
+            #     println(sqrt(2chb.multipole.L+1))
+            #     println(Basics.twice(j1)+1)
+            #     println(Basics.twice(j2)+1)
+            #     println((Basics.twice(cha.symmetry.J)+1))
+            #     println((Basics.twice(chb.symmetry.J)+1))
+            #     println( (2X + 1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi2a))
+            #     println(Pi2c)
+            #     println(Pi2d)
+            #     println("K = ", (2X+1) * sqrt(2cha.multipole.L+1) * sqrt(2chb.multipole.L+1) * sqrt(Pi2a) * Pi2c * Pi2d)
+            #     println("W = ", Pi2b * Pi2e)
+            #     println(" D * Ddash")
+            #     println(Pi2f)
+            #     println(Pi2g)
+            #     println("----------------------")
+            # end
+
+            if ( cha.gauge == Basics.Coulomb || chb.gauge == Basics.Coulomb )
+                Upsilon2_C += ( Upsilon2h * Upsilon2b * Upsilon2c * Upsilon2d * Upsilon2e * Upsilon2f * Upsilon2g * Upsilon2i )
+
+            elseif ( cha.gauge == Basics.Babushkin || chb.gauge == Basics.Babushkin )
+                Upsilon2_B += ( Upsilon2h * Upsilon2b * Upsilon2c * Upsilon2d * Upsilon2e * Upsilon2f * Upsilon2g * Upsilon2i )
+            end
+        end
+        println( "-------------------" )
+
+        # We're multiplying by 2 because we're considering only cha->electric and chb->magnetic
+        print( U2, "$(line.initialLevel.J) --  $(line.finalLevel.J)        " )
+        @printf( U2, "%15.5e\t\t", 2 * Upsilon2_C.re / sigmaBarC )
+        @printf( U2, "%15.5e\t\t", 2 * Upsilon2_B.re / sigmaBarB )
+        @printf( U2, "%15.8e\n",   line.photonEnergy * 27.2114079527 )
+
+    end
+    close(U2)
 end
 
 """
@@ -672,6 +1534,14 @@ function  computeLines(finalMultiplet::Multiplet, initialMultiplet::Multiplet, n
     # Add printout about non-E1 angle-differential cross sections, if required
     if  settings.calcNonE1AngleDifferentialCS
         PhotoIonization.computeDisplayNonE1AngleDifferentialCS(stdout, newLines, settings)
+        PhotoIonization.ManualGamma1(newLines)
+        PhotoIonization.ManualGamma3(newLines)
+        PhotoIonization.ManualPi2(newLines)
+        PhotoIonization.ManualPi4(newLines)
+        PhotoIonization.ManualDelta1(newLines)
+        PhotoIonization.ManualLambda2(newLines)
+        PhotoIonization.ManualLambda4(newLines)
+        PhotoIonization.ManualUpsilon2(newLines)
     end
     #
     #
