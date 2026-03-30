@@ -76,7 +76,7 @@ export AbstractCImethod, AbstractConfigurationRestriction, AbstractEeInteraction
        InteractionStrength, InternalConv, InternalConversion, InternalRecombination, Isotope, IsotopeShift, IsotopicFraction, IsOccupied,
        Kronecker, 
        LandeF, LandeJ, LandeZeeman, Level, LevelSelection, LevelSymmetry, LineSelection, LSjj, LSjjSettings, LeftCircular, 
-       LeadingConfiguration, LeadingConfigurationR,
+       LeadingConfiguration, LeadingConfigurationR, Liouville,
        ManyElectron, MeanFieldSettings, MeanFieldBasis, MeanFieldMultiplet, minus, Model, modify, 
        MultiPhotonDE, MultiPhotonDeExcitation, MultiPhotonDoubleIon, 
        MultiPI, MultiPDI, MultiPhotonIonization, MultipoleMoment, MultipolePolarizibility, Multiplet, MeanConfiguration, MeanOccupation, 
@@ -191,6 +191,7 @@ include("module-InternalConversion.jl")
 include("module-InternalRecombination.jl") 
 include("module-TwoElectronOnePhoton.jl") 
 include("module-DoubleAutoIonization.jl")
+include("module-Liouville.jl")
 #= Further processes, not yet included into the code
 include("module-REDA.jl")
 include("module-READI.jl")
