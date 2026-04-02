@@ -78,6 +78,36 @@ function initializeDensityMatrix(liouvilleLevels::Array{Liouville.RamanLevel,1})
 end
 
 """
+`Liouville.displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})`
+    ... Simplified display of density matrix for TwoColour scheme.
+"""
+function displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})
+    println(stream, " ")
+    println(stream, "  Selected Liouville levels and current density matrix:")
+    println(stream, " ")
+
+    for (idx, liouLevel) in enumerate(liouvilleLevels)
+        # Print level info
+        notation = liouLevel.leadingNotation
+        println(stream, "    Level $idx: $notation")
+
+        # Print diagonal elements (populations)
+        pop = real(densityM[idx, idx])
+        println(stream, "        Population = $(@sprintf("%.6f", pop))")
+
+        # Print first few off-diagonals if non-zero (optional)
+        for j in 1:idx-1
+            if abs(densityM[idx, j]) > 1e-10
+                println(stream, "        Coherence ρ[$idx,$j] = $(densityM[idx, j])")
+            end
+        end
+    end
+
+    println(stream, " ")
+    return nothing
+end
+
+"""
 `Liouville.initializeAtomicHamiltonianMatrix(scheme::TwoColour, liouvilleLevels::Array{Liouville.RamanLevel,1})`
     ... initializes the atomic Hamiltonian matrix.
 """
