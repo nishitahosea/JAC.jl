@@ -51,11 +51,43 @@ end
 
 # DO NOT redefine displayDensityMatrix here — it already exists in the Raman file
 
+"""
+`Liouville.initializeLevels(scheme::TwoColour, multiplet::Multiplet)`
+    ... selects levels based on scheme.levelSelection and returns an array of RamanLevel objects.
+"""
+function initializeLevels(scheme::TwoColour, multiplet::Multiplet)
+    liouvilleLevels = Liouville.RamanLevel[]
+    noLevels = length(scheme.levelSelection.indices)
+    foundIndices = falses(noLevels)
 
-"""
-`Liouville.perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)`
-    ... performs a Liouville time-evolution for two-color XUV+NIR photoionization.
-"""
+    # Check we have enough notations (including loss channel)
+    if length(scheme.levelNotations) != noLevels + 1
+        error("Expect $(noLevels + 1) strings for level notations (including loss channel), got $(length(scheme.levelNotations))")
+    end
+
+    # Select levels from multiplet based on indices
+    for (idx, index) in enumerate(scheme.levelSelection.indices)
+        for level in multiplet.levels
+            if index == level.index
+                foundIndices[idx] = true
+                leadingConf = Basics.extractConfiguration(Basics.LeadingConfiguration(), level)
+                liouvLevel = Liouville.RamanLevel(leadingConf, scheme.levelNotations[idx], level)
+                push!(liouvilleLevels, liouvLevel)
+            end
+        end
+    end
+
+    if !all(foundIndices)
+        error("Not all level indices found in multiplet; foundIndices = $foundIndices")
+    end
+
+    # Add loss channel (ionization sink)
+    push!(liouvilleLevels, Liouville.RamanLevel(Configuration("[He]"), scheme.levelNotations[end], Level()))
+
+    return liouvilleLevels
+end
+
+
 function perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)
     results = Dict{String, Any}()
 
@@ -67,7 +99,9 @@ function perform(scheme::TwoColour, computation::Liouville.Computation; output::
     pulses = Pulse.AbstractPulse[]
     for pulse in computation.pulses
         if typeof(pulse) == Pulse.FelPulse
-            push!(pulses, Pulse.convertPulse(pulse))
+            compPulse = Pulse.convertPulse(pulse)
+            println("compPulse = $compPulse")
+            push!(pulses, compPulse)
         else
             push!(pulses, pulse)
         end
@@ -78,16 +112,15 @@ function perform(scheme::TwoColour, computation::Liouville.Computation; output::
                                           computation.grid, computation.asfSettings)
 
     # Step 3: Initialize levels, density matrix, and Hamiltonians
-    # NOTE: You need to implement these for TwoColour!
-    levels = initializeLevels(scheme, multiplet)           # ← need to implement
-    densityM = initializeDensityMatrix(levels)             # ← can reuse from Raman
-    atomicHM = initializeAtomicHamiltonianMatrix(levels)   # ← can reuse from Raman
-    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses)  # ← need to implement
+    levels = initializeLevels(scheme, multiplet)
+    densityM = initializeDensityMatrix(levels)
+    atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses)
 
     # Step 4: Print initial state
     if computation.settings.printBefore
         displayDensityMatrix(stdout, levels, densityM)
-        displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)  # ← need to implement or adapt
+        # displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)
     end
 
     # Step 5: Time evolution (placeholder for now)
