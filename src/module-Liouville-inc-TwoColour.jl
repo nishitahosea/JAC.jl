@@ -1,49 +1,36 @@
+using ..Basics, ..Defaults, ..Pulse
 
-using  ..Basics,  ..Defaults, ..Pulse
-
-
-"""
-`struct  Liouville.TwoColour`
-    ... defines a struct to comprise the level information for a Liouville time evolution in the two-colour XUV+NIR photoionisation.
-
-    + levelSelection   ::LevelSelection               ... which bound states to include.
-    + levelNotations   ::Array{String,1}              ... labels for each level.
-"""
-struct TwoColour
-    levelSelection     ::LevelSelection             # which bound states to include
-    leadingNotation    ::Array{String,1}            # labels for each level
-    # No frequencies — they come from pulses
-    # No includeIonization flag — you always include it if NIR is present
+# Helper function for Gaussian envelope
+function gaussianEnvelope(t::Float64, sigma::Float64)
+    wa = t^2 / (2*sigma)^2
+    return exp(-wa) / (sigma * sqrt(2pi))
 end
 
 """
-`Liouville.TwoColour()`  ... constructor for the default values of Liouville.TwoColour set
+`struct  Liouville.TwoColour <: Liouville.AbstractLiouvilleScheme`
+    ... defines a struct for two-colour XUV+NIR photoionisation.
 """
+struct TwoColour <: Liouville.AbstractLiouvilleScheme
+    levelSelection          ::LevelSelection
+    levelNotations          ::Array{String,1}
+end
 
 # Default constructor
 function TwoColour()
-    TwoColour(LevelSelection(), String[], false)
+    TwoColour(LevelSelection(), String[])
 end
 
-#######################################################################################################################
-#######################################################################################################################
-#######################################################################################################################
-
-
-
-
-# `Base.show(io::IO, lioulevel::Liouville.TwoColour)`  ... prepares a proper printout of the variable settings::Liouville.TwoColour.
-function Base.show(io::IO, data::Liouville.TwoColour)
+# Show function
+function Base.show(io::IO, scheme::TwoColour)
     println(io, "TwoColour:")
-    println(io, "levelSelection:        $(TwoColour.LevelSelection)  ")
-    println(io, "levelNotations:        $(TwoColour.LevelNotations)  ")
+    println(io, "  levelSelection:    $(scheme.levelSelection)")
+    println(io, "  levelNotations:    $(scheme.levelNotations)")
 end
-"""
-`Liouville.determineLightField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
-    ... determines the field amplitude A(t) at the given time t at the (central) position of the atom or
-        atomic cloud. All pulses must be of computational type. An fieldAmplitude::Float64 is returned.
-"""
 
+"""
+`Liouville.getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
+    ... determines the total electric field E(t) at time t.
+"""
 function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
     E_total = 0.0
 
@@ -66,24 +53,24 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
 end
 
 """
-`Liouville.displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.TwoColour,1}, densityM::Matrix{ComplexF64})`
-    ... Display the current density matrix together with the ; nothing is returned.
+`Liouville.displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})`
+    ... Display the current density matrix.
 """
-function displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.TwoColour,1}, densityM::Matrix{ComplexF64})
-
+function displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})
     println(stream, " ")
-    println(stream, "  Selected Liouville TwoColour levels and current density matrix:")
+    println(stream, "  Selected Liouville levels and current density matrix:")
     println(stream, " ")
-    for  (idx, liouLevel)  in  enumerate(liouvilleLevels)
-        sa = "       " * string(idx) * ")  ";   sa = sa[end-10:end]
-        sa = sa * string(liouLevel.leadingConfig)    * "   "
-        sa = sa * string(liouLevel.leadingNotation)  * "                          "
+    for (idx, liouLevel) in enumerate(liouvilleLevels)
+        sa = "       " * string(idx) * ")  "
+        sa = sa * string(liouLevel.leadingConfig) * "   "
+        sa = sa * string(liouLevel.leadingNotation) * "                          "
         sa = sa[1:70]
         row = densityM[idx, :]
-        for z in row   sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))    end
+        for z in row
+            sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))
+        end
         println(sa)
     end
     println(stream, " ")
-
-    return( nothing )
+    return nothing
 end
