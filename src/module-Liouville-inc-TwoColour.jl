@@ -36,13 +36,10 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
 
     for pulse in pulses
         if typeof(pulse) == Pulse.GaussianSimplified
-            # Check if within pulse duration
             if abs(t - pulse.timeDelay) > 5 * pulse.fwhm
                 continue
             end
-            # Calculate envelope
             envelope = gaussianEnvelope(t - pulse.timeDelay, pulse.fwhm/2.0)
-            # Add contribution with carrier oscillation
             E_total = E_total + pulse.A0 * envelope * cos(pulse.omega * (t - pulse.timeDelay) + pulse.cep)
         else
             error("Unknown pulse type: $(typeof(pulse))")
@@ -52,25 +49,4 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
     return E_total
 end
 
-"""
-`Liouville.displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})`
-    ... Display the current density matrix.
-"""
-function displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})
-    println(stream, " ")
-    println(stream, "  Selected Liouville levels and current density matrix:")
-    println(stream, " ")
-    for (idx, liouLevel) in enumerate(liouvilleLevels)
-        sa = "       " * string(idx) * ")  "
-        sa = sa * string(liouLevel.leadingConfig) * "   "
-        sa = sa * string(liouLevel.leadingNotation) * "                          "
-        sa = sa[1:70]
-        row = densityM[idx, :]
-        for z in row
-            sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))
-        end
-        println(sa)
-    end
-    println(stream, " ")
-    return nothing
-end
+# DO NOT redefine displayDensityMatrix here — it already exists in the Raman file

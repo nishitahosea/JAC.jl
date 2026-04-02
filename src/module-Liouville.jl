@@ -261,7 +261,7 @@ end
 
 
 
-#include("module-Liouville-inc-stimulated-raman.jl")
+include("module-Liouville-inc-stimulated-raman.jl")
 include("module-Liouville-inc-TwoColour.jl")
 
 #######################################################################################################################
