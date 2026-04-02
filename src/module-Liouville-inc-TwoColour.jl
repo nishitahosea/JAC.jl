@@ -111,20 +111,27 @@ function perform(scheme::TwoColour, computation::Liouville.Computation; output::
     multiplet = SelfConsistent.performSCF(computation.refConfigs, computation.nuclearModel,
                                           computation.grid, computation.asfSettings)
 
-    # Step 3: Initialize levels, density matrix, and Hamiltonians
+    # Step 3: Initialize levels and density matrix
     levels = initializeLevels(scheme, multiplet)
     densityM = initializeDensityMatrix(levels)
-    atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
+
+    # Step 4: Initialize Hamiltonians
+    # Reuse the atomic Hamiltonian function from Raman (it only needs levels)
+    atomicHM = Liouville.initializeAtomicHamiltonianMatrix(scheme, levels)  # This will call the Raman version
     couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses)
 
-    # Step 4: Print initial state
+    # Step 5: Print initial state
     if computation.settings.printBefore
-        displayDensityMatrix(stdout, levels, densityM)
-        # displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)
+        Liouville.displayDensityMatrix(stdout, levels, densityM)
+        # Optionally display Hamiltonian
+        println("\n  Atomic Hamiltonian (diagonal elements):")
+        for i in 1:size(atomicHM,1)
+            println("    H[$i,$i] = $(real(atomicHM[i,i])) a.u.")
+        end
     end
 
-    # Step 5: Time evolution (placeholder for now)
-    println("  Time evolution not yet implemented for TwoColour scheme.")
+    # Step 6: Time evolution (placeholder for now)
+    println("\n  Time evolution not yet implemented for TwoColour scheme.")
     println("  Initial density matrix has been set up.")
 
     if output
