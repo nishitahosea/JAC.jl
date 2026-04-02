@@ -50,3 +50,57 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
 end
 
 # DO NOT redefine displayDensityMatrix here — it already exists in the Raman file
+
+
+"""
+`Liouville.perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)`
+    ... performs a Liouville time-evolution for two-color XUV+NIR photoionization.
+"""
+function perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)
+    results = Dict{String, Any}()
+
+    println("")
+    printstyled("Liouville.perform(): Two-color XUV+NIR computation starts now ... \n", color=:light_green)
+    printstyled("------------------------------------------------------------ \n", color=:light_green)
+
+    # Step 1: Convert pulses to computational format
+    pulses = Pulse.AbstractPulse[]
+    for pulse in computation.pulses
+        if typeof(pulse) == Pulse.FelPulse
+            push!(pulses, Pulse.convertPulse(pulse))
+        else
+            push!(pulses, pulse)
+        end
+    end
+
+    # Step 2: Compute atomic structure (SCF)
+    multiplet = SelfConsistent.performSCF(computation.refConfigs, computation.nuclearModel,
+                                          computation.grid, computation.asfSettings)
+
+    # Step 3: Initialize levels, density matrix, and Hamiltonians
+    # NOTE: You need to implement these for TwoColour!
+    levels = initializeLevels(scheme, multiplet)           # ← need to implement
+    densityM = initializeDensityMatrix(levels)             # ← can reuse from Raman
+    atomicHM = initializeAtomicHamiltonianMatrix(levels)   # ← can reuse from Raman
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses)  # ← need to implement
+
+    # Step 4: Print initial state
+    if computation.settings.printBefore
+        displayDensityMatrix(stdout, levels, densityM)
+        displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)  # ← need to implement or adapt
+    end
+
+    # Step 5: Time evolution (placeholder for now)
+    println("  Time evolution not yet implemented for TwoColour scheme.")
+    println("  Initial density matrix has been set up.")
+
+    if output
+        results["levels"] = levels
+        results["initial_density"] = densityM
+        results["atomic_hamiltonian"] = atomicHM
+    end
+
+    println("\n> Two-color computation setup complete ...")
+
+    return results
+end
