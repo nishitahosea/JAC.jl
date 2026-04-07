@@ -1,9 +1,10 @@
-module LiouvilleTwoColour
+# module-Liouville-inc-TwoColour.jl
+# TwoColour scheme for XUV+NIR photoionization - directly in Liouville module
 
 using Printf
 using ..Basics, ..Defaults, ..Pulse
-using ..LiouvilleBase
-import ..Liouville: AbstractLiouvilleScheme, Computation   # ← ADD Computation here
+using .LiouvilleBase
+import ..Liouville: AbstractLiouvilleScheme, Computation
 
 """
 `struct  TwoColour <: AbstractLiouvilleScheme`
@@ -117,5 +118,3 @@ function perform(scheme::TwoColour, computation::Computation; output::Bool=true)
 
     return results
 end
-
-end # module
