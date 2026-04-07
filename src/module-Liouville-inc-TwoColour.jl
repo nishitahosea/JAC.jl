@@ -2,7 +2,7 @@ module LiouvilleTwoColour
 
 using Printf
 using ..Basics, ..Defaults, ..Pulse
-using .LiouvilleBase
+using ..LiouvilleBase
 import ..Liouville: AbstractLiouvilleScheme
 
 """
