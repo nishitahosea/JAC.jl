@@ -1,150 +1,58 @@
-using ..Basics, ..Defaults, ..Pulse
-
-# Helper function for Gaussian envelope
-function gaussianEnvelope(t::Float64, sigma::Float64)
-    wa = t^2 / (2*sigma)^2
+# Should I add this to Pulse module?
+function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
+    sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))  # Convert FWHM to sigma
+    wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
     return exp(-wa) / (sigma * sqrt(2pi))
 end
 
+using  ..Basics,  ..Defaults, ..Pulse
+
+
 """
-`struct  Liouville.TwoColour <: Liouville.AbstractLiouvilleScheme`
-    ... defines a struct for two-colour XUV+NIR photoionisation.
+`struct  Liouville.TwoColour`
+    ... defines a struct to comprise the level information for a Liouville time evolution in the two-colour XUV+NIR photoionisation.
+
+    + levelSelection   ::LevelSelection               ... which bound states to include.
+    + levelNotations   ::Array{String,1}              ... labels for each level.
 """
-struct TwoColour <: Liouville.AbstractLiouvilleScheme
-    levelSelection          ::LevelSelection
-    levelNotations          ::Array{String,1}
+struct TwoColourScheme
+    levelSelection     ::LevelSelection             # which bound states to include
+    leadingNotation    ::Array{String,1}            # labels for each level
+    # No frequencies — they come from pulses
+    # No includeIonization flag — you always include it if NIR is present
 end
 
 # Default constructor
+function TwoColourScheme()
+    TwoColourScheme(LevelSelection(), String[], false)
+end
+
+#######################################################################################################################
+#######################################################################################################################
+#######################################################################################################################
+
+
+"""
+`Liouville.TwoColour()`  ... constructor for the default values of Liouville.TwoColour set
+"""
 function TwoColour()
-    TwoColour(LevelSelection(), String[])
+    TwoColourScheme( LevelSelection(), Level() )
 end
 
-# Show function
-function Base.show(io::IO, scheme::TwoColour)
-    println(io, "TwoColour:")
-    println(io, "  levelSelection:    $(scheme.levelSelection)")
-    println(io, "  levelNotations:    $(scheme.levelNotations)")
-end
 
-"""
-`Liouville.initializeLevels(scheme::TwoColour, multiplet::Multiplet)`
-    ... selects levels based on scheme.levelSelection.
-"""
-function initializeLevels(scheme::TwoColour, multiplet::Multiplet)
-    liouvilleLevels = Liouville.RamanLevel[]
-    noLevels = length(scheme.levelSelection.indices)
-    foundIndices = falses(noLevels)
-
-    if length(scheme.levelNotations) != noLevels + 1
-        error("Expect $(noLevels + 1) strings for level notations (including loss channel), got $(length(scheme.levelNotations))")
-    end
-
-    for (idx, index) in enumerate(scheme.levelSelection.indices)
-        for level in multiplet.levels
-            if index == level.index
-                foundIndices[idx] = true
-                leadingConf = Basics.extractConfiguration(Basics.LeadingConfiguration(), level)
-                liouvLevel = Liouville.RamanLevel(leadingConf, scheme.levelNotations[idx], level)
-                push!(liouvilleLevels, liouvLevel)
-            end
-        end
-    end
-
-    if !all(foundIndices)
-        error("Not all level indices found in multiplet; foundIndices = $foundIndices")
-    end
-
-    # Add loss channel
-    push!(liouvilleLevels, Liouville.RamanLevel(Configuration("[He]"), scheme.levelNotations[end], Level()))
-
-    return liouvilleLevels
+# `Base.show(io::IO, lioulevel::Liouville.TwoColour)`  ... prepares a proper printout of the variable settings::Liouville.TwoColourScheme.
+function Base.show(io::IO, data::Liouville.TwoColour)
+    println(io, "TwoColourScheme:")
+    println(io, "levelSelection:        $(scheme.LevelSelection)  ")
+    println(io, "levelNotations:        $(scheme.LevelNotations)  ")
 end
 
 """
-`Liouville.initializeDensityMatrix(liouvilleLevels::Array{Liouville.RamanLevel,1})`
-    ... initializes density matrix with ground state populated.
+`Liouville.determineLightField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
+    ... determines the field amplitude A(t) at the given time t at the (central) position of the atom or
+        atomic cloud. All pulses must be of computational type. An fieldAmplitude::Float64 is returned.
 """
-function initializeDensityMatrix(liouvilleLevels::Array{Liouville.RamanLevel,1})
-    noLevels = length(liouvilleLevels)
-    densityM = zeros(ComplexF64, noLevels, noLevels)
-    energies = [lioulevel.level.energy for lioulevel in liouvilleLevels]
 
-    lowestEn = minimum(energies)
-    idx = findfirst(==(lowestEn), energies)
-    densityM[idx, idx] = 1.0
-
-    return densityM
-end
-
-"""
-`Liouville.displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})`
-    ... Simplified display of density matrix for TwoColour scheme.
-"""
-function displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.RamanLevel,1}, densityM::Matrix{ComplexF64})
-    println(stream, " ")
-    println(stream, "  Selected Liouville levels and current density matrix:")
-    println(stream, " ")
-
-    for (idx, liouLevel) in enumerate(liouvilleLevels)
-        # Print level info
-        notation = liouLevel.leadingNotation
-        println(stream, "    Level $idx: $notation")
-
-        # Print diagonal elements (populations)
-        pop = real(densityM[idx, idx])
-        println(stream, "        Population = $(@sprintf("%.6f", pop))")
-
-        # Print first few off-diagonals if non-zero (optional)
-        for j in 1:idx-1
-            if abs(densityM[idx, j]) > 1e-10
-                println(stream, "        Coherence ρ[$idx,$j] = $(densityM[idx, j])")
-            end
-        end
-    end
-
-    println(stream, " ")
-    return nothing
-end
-
-"""
-`Liouville.initializeAtomicHamiltonianMatrix(scheme::TwoColour, liouvilleLevels::Array{Liouville.RamanLevel,1})`
-    ... initializes the atomic Hamiltonian matrix.
-"""
-function initializeAtomicHamiltonianMatrix(scheme::TwoColour, liouvilleLevels::Array{Liouville.RamanLevel,1})
-    noLevels = length(liouvilleLevels)
-    energies = Float64[]
-    hamiltonian = zeros(ComplexF64, noLevels, noLevels)
-
-    for lioulevel in liouvilleLevels
-        push!(energies, lioulevel.level.energy)
-    end
-    lowestEn = minimum(energies)
-
-    for n in 1:noLevels
-        hamiltonian[n,n] = energies[n] - lowestEn
-    end
-
-    return hamiltonian
-end
-
-"""
-`Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColour, levels::Array{Liouville.RamanLevel,1}, pulses)`
-    ... placeholder for V(t) coupling.
-"""
-function initializeCouplingHamiltonianMatrix(scheme::TwoColour, levels::Array{Liouville.RamanLevel,1}, pulses)
-    noLevels = length(levels)
-    couplingHM = Matrix{Function}(undef, noLevels, noLevels)
-    for i in 1:noLevels, j in 1:noLevels
-        couplingHM[i,j] = t -> 0.0 + 0.0im
-    end
-    return couplingHM
-end
-
-"""
-`Liouville.getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
-    ... determines the total electric field E(t) at time t.
-"""
 function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
     E_total = 0.0
     for pulse in pulses
@@ -152,66 +60,32 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
             if abs(t - pulse.timeDelay) > 5 * pulse.fwhm
                 continue
             end
-            envelope = gaussianEnvelope(t - pulse.timeDelay, pulse.fwhm/2.0)
-            E_total = E_total + pulse.A0 * envelope * cos(pulse.omega * (t - pulse.timeDelay) + pulse.cep)
+            E_total = E_total + pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay) + pulse.cep)
         else
             error("Unknown pulse type: $(typeof(pulse))")
         end
     end
     return E_total
 end
-
 """
-`Liouville.perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)`
-    ... main driver for two-color computation.
+`Liouville.displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.TwoColour,1}, densityM::Matrix{ComplexF64})`
+    ... Display the current density matrix together with the ; nothing is returned.
 """
-function perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)
-    results = Dict{String, Any}()
+function displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.TwoColour,1}, densityM::Matrix{ComplexF64})
 
-    println("")
-    printstyled("Liouville.perform(): Two-color XUV+NIR computation starts now ... \n", color=:light_green)
-    printstyled("------------------------------------------------------------ \n", color=:light_green)
-
-    # Step 1: Convert pulses
-    pulses = Pulse.AbstractPulse[]
-    for pulse in computation.pulses
-        if typeof(pulse) == Pulse.FelPulse
-            compPulse = Pulse.convertPulse(pulse)
-            push!(pulses, compPulse)
-        else
-            push!(pulses, pulse)
-        end
+    println(stream, " ")
+    println(stream, "  Selected Liouville TwoColour levels and current density matrix:")
+    println(stream, " ")
+    for  (idx, liouLevel)  in  enumerate(liouvilleLevels)
+        sa = "       " * string(idx) * ")  ";   sa = sa[end-10:end]
+        sa = sa * string(liouLevel.leadingConfig)    * "   "
+        sa = sa * string(liouLevel.leadingNotation)  * "                          "
+        sa = sa[1:70]
+        row = densityM[idx, :]
+        for z in row   sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))    end
+        println(sa)
     end
+    println(stream, " ")
 
-    # Step 2: Atomic structure
-    multiplet = SelfConsistent.performSCF(computation.refConfigs, computation.nuclearModel,
-                                          computation.grid, computation.asfSettings)
-
-    # Step 3: Initialize
-    levels = initializeLevels(scheme, multiplet)
-    densityM = initializeDensityMatrix(levels)
-    atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
-    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses)
-
-    # Step 4: Print
-    if computation.settings.printBefore
-        displayDensityMatrix(stdout, levels, densityM)
-        println("\n  Atomic Hamiltonian (diagonal):")
-        for i in 1:size(atomicHM,1)
-            println("    H[$i,$i] = $(real(atomicHM[i,i])) a.u.")
-        end
-    end
-
-    println("\n  Time evolution not yet implemented for TwoColour scheme.")
-    println("  Initial density matrix has been set up.")
-
-    if output
-        results["levels"] = levels
-        results["initial_density"] = densityM
-        results["atomic_hamiltonian"] = atomicHM
-    end
-
-    println("\n> Two-color computation setup complete ...")
-
-    return results
+    return( nothing )
 end
