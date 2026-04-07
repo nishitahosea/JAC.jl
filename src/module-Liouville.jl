@@ -268,7 +268,7 @@ include("module-Liouville-base.jl")
 include("module-Liouville-inc-TwoColour.jl")
 
 #Export the abstract type and public functions
-export AbstractLiouvilleScheme, Computation
+export AbstractLiouvilleScheme, Computation, TwoColour
 #######################################################################################################################
 #######################################################################################################################
 #######################################################################################################################
