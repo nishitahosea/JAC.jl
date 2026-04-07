@@ -267,8 +267,7 @@ include("module-Liouville-base.jl")
 #include("module-Liouville-inc-stimulated-raman.jl")
 include("module-Liouville-inc-TwoColour.jl")
 
-# Re-export TwoColour from the submodule
-const TwoColour = LiouvilleTwoColour.TwoColour
+
 
 #Export the abstract type and public functions
 export AbstractLiouvilleScheme, Computation, TwoColour
