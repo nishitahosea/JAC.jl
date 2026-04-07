@@ -3,7 +3,7 @@ module LiouvilleTwoColour
 using Printf
 using ..Basics, ..Defaults, ..Pulse
 using ..LiouvilleBase
-import ..Liouville: AbstractLiouvilleScheme
+import ..Liouville: AbstractLiouvilleScheme, Computation   # ← ADD Computation here
 
 """
 `struct  TwoColour <: AbstractLiouvilleScheme`
