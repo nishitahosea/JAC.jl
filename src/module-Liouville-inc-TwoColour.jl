@@ -1,10 +1,15 @@
-using ..Basics, ..Defaults, ..Pulse, ..LiouvilleBase
+module LiouvilleTwoColour
+
+using Printf
+using ..Basics, ..Defaults, ..Pulse
+using .LiouvilleBase
+import ..Liouville: AbstractLiouvilleScheme
 
 """
-`struct  Liouville.TwoColour <: Liouville.AbstractLiouvilleScheme`
+`struct  TwoColour <: AbstractLiouvilleScheme`
     ... defines a struct for two-colour XUV+NIR photoionisation.
 """
-struct TwoColour <: Liouville.AbstractLiouvilleScheme
+struct TwoColour <: AbstractLiouvilleScheme
     levelSelection          ::LevelSelection
     leadingNotation         ::Array{String,1}
 end
@@ -35,7 +40,7 @@ function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
 end
 
 """
-`Liouville.getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
+`getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
     ... determines the total electric field E(t) at time t.
 """
 function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
@@ -54,14 +59,14 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
 end
 
 """
-`Liouville.perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)`
+`perform(scheme::TwoColour, computation::Computation; output::Bool=true)`
     ... performs a Liouville time-evolution for two-color XUV+NIR photoionization.
 """
-function perform(scheme::TwoColour, computation::Liouville.Computation; output::Bool=true)
+function perform(scheme::TwoColour, computation::Computation; output::Bool=true)
     results = Dict{String, Any}()
 
     println("")
-    printstyled("Liouville.perform(): Two-color XUV+NIR computation starts now ... \n", color=:light_green)
+    printstyled("Two-color XUV+NIR computation starts now ... \n", color=:light_green)
     printstyled("------------------------------------------------------------ \n", color=:light_green)
 
     # Step 1: Convert pulses
@@ -112,3 +117,5 @@ function perform(scheme::TwoColour, computation::Liouville.Computation; output::
 
     return results
 end
+
+end # module
