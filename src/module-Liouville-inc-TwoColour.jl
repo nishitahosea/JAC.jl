@@ -1,58 +1,43 @@
-# Should I add this to Pulse module?
+using ..Basics, ..Defaults, ..Pulse
+
+"""
+`struct  Liouville.TwoColourScheme <: Liouville.AbstractLiouvilleScheme`
+    ... defines a struct for two-colour XUV+NIR photoionisation.
+"""
+struct TwoColourScheme <: Liouville.AbstractLiouvilleScheme
+    levelSelection          ::LevelSelection
+    leadingNotation         ::Array{String,1}
+end
+
+# Default constructor
+function TwoColourScheme()
+    TwoColourScheme(LevelSelection(), String[])
+end
+
+# Show function
+function Base.show(io::IO, scheme::TwoColourScheme)
+    println(io, "TwoColourScheme:")
+    println(io, "  levelSelection:    $(scheme.levelSelection)")
+    println(io, "  leadingNotation:   $(scheme.leadingNotation)")
+end
+
+# Helper function for Gaussian envelope
+function gaussianEnvelope(t::Float64, sigma::Float64)
+    wa = t^2 / (2*sigma)^2
+    return exp(-wa) / (sigma * sqrt(2pi))
+end
+
+# Envelope for GaussianSimplified pulse
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
     sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))  # Convert FWHM to sigma
     wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
     return exp(-wa) / (sigma * sqrt(2pi))
 end
 
-using  ..Basics,  ..Defaults, ..Pulse
-
-
 """
-`struct  Liouville.TwoColour`
-    ... defines a struct to comprise the level information for a Liouville time evolution in the two-colour XUV+NIR photoionisation.
-
-    + levelSelection   ::LevelSelection               ... which bound states to include.
-    + levelNotation   ::Array{String,1}              ... labels for each level.
+`Liouville.getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
+    ... determines the total electric field E(t) at time t.
 """
-struct TwoColourScheme
-    levelSelection     ::LevelSelection             # which bound states to include
-    leadingNotation    ::Array{String,1}            # labels for each level
-    # No frequencies — they come from pulses
-    # No includeIonization flag — you always include it if NIR is present
-end
-
-# Default constructor
-function TwoColourScheme()
-    TwoColourScheme(LevelSelection(), String[], false)
-end
-
-#######################################################################################################################
-#######################################################################################################################
-#######################################################################################################################
-
-
-"""
-`Liouville.TwoColour()`  ... constructor for the default values of Liouville.TwoColour set
-"""
-function TwoColour()
-    TwoColourScheme( LevelSelection(), Level() )
-end
-
-
-# `Base.show(io::IO, lioulevel::Liouville.TwoColour)`  ... prepares a proper printout of the variable settings::Liouville.TwoColourScheme.
-function Base.show(io::IO, scheme::Liouville.TwoColour)
-    println(io, "TwoColourScheme:")
-    println(io, "levelSelection:        $(scheme.LevelSelection)  ")
-    println(io, "levelNotation:        $(scheme.LevelNotation)  ")
-end
-
-"""
-`Liouville.determineLightField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)`
-    ... determines the field amplitude A(t) at the given time t at the (central) position of the atom or
-        atomic cloud. All pulses must be of computational type. An fieldAmplitude::Float64 is returned.
-"""
-
 function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
     E_total = 0.0
     for pulse in pulses
@@ -67,25 +52,6 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
     end
     return E_total
 end
-"""
-`Liouville.displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.TwoColour,1}, densityM::Matrix{ComplexF64})`
-    ... Display the current density matrix together with the ; nothing is returned.
-"""
-function displayDensityMatrix(stream, liouvilleLevels::Array{Liouville.TwoColour,1}, densityM::Matrix{ComplexF64})
 
-    println(stream, " ")
-    println(stream, "  Selected Liouville TwoColour levels and current density matrix:")
-    println(stream, " ")
-    for  (idx, liouLevel)  in  enumerate(liouvilleLevels)
-        sa = "       " * string(idx) * ")  ";   sa = sa[end-10:end]
-        sa = sa * string(liouLevel.leadingConfig)    * "   "
-        sa = sa * string(liouLevel.leadingNotation)  * "                          "
-        sa = sa[1:70]
-        row = densityM[idx, :]
-        for z in row   sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))    end
-        println(sa)
-    end
-    println(stream, " ")
-
-    return( nothing )
-end
+# Note: displayDensityMatrix is defined in the Raman file for RamanLevel
+# Do NOT redefine it here for TwoColourScheme
