@@ -264,9 +264,11 @@ end
 include("module-Liouville-base.jl")
 
 # Then include the specific schemes
-include("module-Liouville-inc-stimulated-raman.jl")
+#include("module-Liouville-inc-stimulated-raman.jl")
 include("module-Liouville-inc-TwoColour.jl")
 
+#Export the abstract type and public functions
+export AbstractLiouvilleScheme
 #######################################################################################################################
 #######################################################################################################################
 #######################################################################################################################
