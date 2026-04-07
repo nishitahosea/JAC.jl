@@ -3,7 +3,10 @@
 
 module LiouvilleBase
 
+# Import necessary types from parent modules
 using ..Basics, ..Defaults, ..Pulse
+import ..AtomicState: Level, Configuration
+import ..Basics: LevelSelection
 
 # Common level container
 struct AtomicLevel
