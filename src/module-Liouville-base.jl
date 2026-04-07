@@ -3,7 +3,7 @@
 
 module LiouvilleBase
 
-# Import necessary types from parent modules
+using Printf
 using ..Basics, ..Defaults, ..Pulse
 import ..AtomicState: Level, Configuration
 import ..Basics: LevelSelection
@@ -41,7 +41,7 @@ function displayDensityMatrix(stream, levels::Vector{AtomicLevel}, densityM::Mat
     println(stream, " ")
     for (idx, lvl) in enumerate(levels)
         pop = real(densityM[idx, idx])
-        println(stream, "    Level $idx: $(lvl.leadingNotation) → Population = $(@sprintf("%.6f", pop))")
+        println(stream, "    Level $idx: $(lvl.leadingNotation) → Population = $(Printf.@sprintf("%.6f", pop))")
     end
     println(stream, " ")
     return nothing
