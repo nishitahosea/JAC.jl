@@ -13,7 +13,7 @@ using  ..Basics,  ..Defaults, ..Pulse
     ... defines a struct to comprise the level information for a Liouville time evolution in the two-colour XUV+NIR photoionisation.
 
     + levelSelection   ::LevelSelection               ... which bound states to include.
-    + levelNotations   ::Array{String,1}              ... labels for each level.
+    + levelNotation   ::Array{String,1}              ... labels for each level.
 """
 struct TwoColourScheme
     levelSelection     ::LevelSelection             # which bound states to include
@@ -41,10 +41,10 @@ end
 
 
 # `Base.show(io::IO, lioulevel::Liouville.TwoColour)`  ... prepares a proper printout of the variable settings::Liouville.TwoColourScheme.
-function Base.show(io::IO, data::Liouville.TwoColour)
+function Base.show(io::IO, scheme::Liouville.TwoColour)
     println(io, "TwoColourScheme:")
     println(io, "levelSelection:        $(scheme.LevelSelection)  ")
-    println(io, "levelNotations:        $(scheme.LevelNotations)  ")
+    println(io, "levelNotation:        $(scheme.LevelNotation)  ")
 end
 
 """
