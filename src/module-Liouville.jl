@@ -260,7 +260,10 @@ function Base.show(io::IO, data::Liouville.DensityMatrixData)
 end
 
 
+# Include base module FIRST
+include("module-Liouville-base.jl")
 
+# Then include the specific schemes
 include("module-Liouville-inc-stimulated-raman.jl")
 include("module-Liouville-inc-TwoColour.jl")
 
