@@ -1,22 +1,22 @@
 using ..Basics, ..Defaults, ..Pulse
 
 """
-`struct  Liouville.TwoColourScheme <: Liouville.AbstractLiouvilleScheme`
+`struct  Liouville.TwoColour <: Liouville.AbstractLiouvilleScheme`
     ... defines a struct for two-colour XUV+NIR photoionisation.
 """
-struct TwoColourScheme <: Liouville.AbstractLiouvilleScheme
+struct TwoColour <: Liouville.AbstractLiouvilleScheme
     levelSelection          ::LevelSelection
     leadingNotation         ::Array{String,1}
 end
 
 # Default constructor
-function TwoColourScheme()
-    TwoColourScheme(LevelSelection(), String[])
+function TwoColour()
+    TwoColour(LevelSelection(), String[])
 end
 
 # Show function
-function Base.show(io::IO, scheme::TwoColourScheme)
-    println(io, "TwoColourScheme:")
+function Base.show(io::IO, scheme::TwoColour)
+    println(io, "TwoColour:")
     println(io, "  levelSelection:    $(scheme.levelSelection)")
     println(io, "  leadingNotation:   $(scheme.leadingNotation)")
 end
@@ -29,7 +29,7 @@ end
 
 # Envelope for GaussianSimplified pulse
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
-    sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))  # Convert FWHM to sigma
+    sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
     wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
     return exp(-wa) / (sigma * sqrt(2pi))
 end
@@ -52,6 +52,3 @@ function getTotalElectricField(pulses::Vector{Pulse.AbstractPulse}, t::Float64)
     end
     return E_total
 end
-
-# Note: displayDensityMatrix is defined in the Raman file for RamanLevel
-# Do NOT redefine it here for TwoColourScheme
