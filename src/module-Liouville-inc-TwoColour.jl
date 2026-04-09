@@ -94,7 +94,10 @@ function displayDensityMatrix(stream, levels::Array{TwoColourLevel,1}, densityM:
         sa = "       " * string(idx) * ")  "
         sa = sa * string(level.leadingConfig) * "   "
         sa = sa * string(level.leadingNotation) * "                          "
-        sa = sa[1:70]
+        # Only truncate if string is long enough
+        if length(sa) >= 70
+            sa = sa[1:70]
+        end
         row = densityM[idx, :]
         for z in row
             sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))
