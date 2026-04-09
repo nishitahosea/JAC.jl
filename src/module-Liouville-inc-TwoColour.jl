@@ -1,24 +1,48 @@
-module LiouvilleTwoColour
+# module-Liouville-inc-TwoColour.jl
+# TwoColour scheme for XUV+NIR photoionization - following StimulatedRamanScheme pattern
 
+using Printf
 using ..Basics, ..Defaults, ..Pulse, ..LiouvilleBase
+
+# Import the abstract type from the parent Liouville module
 import ..Liouville: AbstractLiouvilleScheme
 
+"""
+`struct TwoColourScheme <: AbstractLiouvilleScheme`
+    ... defines a scheme for two-color (XUV+NIR) photoionization computations.
+    Follows the same pattern as StimulatedRamanScheme.
+"""
 struct TwoColourScheme <: AbstractLiouvilleScheme
-    levelSelection          ::LevelSelection      # Reuse same structure!
-    levelNotations          ::Array{String,1}     # Reuse same structure!
-    # Add TwoColour-specific parameters if needed
-    # e.g., ionizationRate ::Float64
+    levelSelection          ::LevelSelection      # Which levels to include
+    levelNotations          ::Array{String,1}     # Names for each level
+    # TwoColour-specific parameters can be added here
+    # e.g., ionizationRate   ::Float64
 end
 
+"""
+`TwoColourScheme()` - Default constructor
+"""
 function TwoColourScheme()
     TwoColourScheme(LevelSelection(), String[])
 end
 
-# Reuse the SAME pattern as StimulatedRamanScheme!
+"""
+`Base.show(io::IO, scheme::TwoColourScheme)` - Print scheme information
+"""
+function Base.show(io::IO, scheme::TwoColourScheme)
+    println(io, "TwoColourScheme:")
+    println(io, "  levelSelection:    $(scheme.levelSelection)")
+    println(io, "  levelNotations:    $(scheme.levelNotations)")
+end
+
+"""
+`initializeLevels(scheme::TwoColourScheme, multiplet::Multiplet)`
+    - Initialize atomic levels following the same pattern as StimulatedRamanScheme
+"""
 function initializeLevels(scheme::TwoColourScheme, multiplet::Multiplet)
-    # Same logic as StimulatedRamanScheme.initializeLevels
     levels = LiouvilleBase.AtomicLevel[]
 
+    # Add selected levels
     for (idx, index) in enumerate(scheme.levelSelection.indices)
         for level in multiplet.levels
             if index == level.index
@@ -28,7 +52,7 @@ function initializeLevels(scheme::TwoColourScheme, multiplet::Multiplet)
         end
     end
 
-    # Add loss channel for ionization
+    # Add loss channel (ionization continuum)
     if length(scheme.levelNotations) > length(scheme.levelSelection.indices)
         push!(levels, LiouvilleBase.AtomicLevel(Configuration("[He]"), scheme.levelNotations[end], Level()))
     end
@@ -36,11 +60,18 @@ function initializeLevels(scheme::TwoColourScheme, multiplet::Multiplet)
     return levels
 end
 
+"""
+`perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)`
+    - Perform two-color XUV+NIR photoionization computation
+"""
 function perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)
-    # Same structure as StimulatedRamanScheme.perform!
     results = Dict{String, Any}()
 
-    # Convert pulses (same as Raman)
+    println("")
+    printstyled("Liouville.perform(): TwoColour XUV+NIR computation starts now ... \n", color=:light_green)
+    printstyled("------------------------------------------------------------ \n", color=:light_green)
+
+    # Convert pulses (same as StimulatedRamanScheme)
     pulses = Pulse.AbstractPulse[]
     for pulse in computation.pulses
         if typeof(pulse) == Pulse.FelPulse
@@ -50,23 +81,21 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
         end
     end
 
-    # Atomic structure (same as Raman)
+    # Atomic structure (same as StimulatedRamanScheme)
     multiplet = SelfConsistent.performSCF(computation.refConfigs, computation.nuclearModel,
                                           computation.grid, computation.asfSettings)
 
-    # Initialize levels (same pattern as Raman!)
+    # Initialize levels (same pattern as StimulatedRamanScheme)
     levels = initializeLevels(scheme, multiplet)
-    densityM = LiouvilleBase.initializeDensityMatrix(levels)  # Same function!
+    densityM = LiouvilleBase.initializeDensityMatrix(levels)
 
+    # Print initial state if requested (same as StimulatedRamanScheme)
     if computation.settings.printBefore
-        LiouvilleBase.displayDensityMatrix(stdout, levels, densityM)  # Same function!
+        LiouvilleBase.displayDensityMatrix(stdout, levels, densityM)
     end
 
-    # HERE is where TwoColour differs - the time evolution!
-    # Different Liouville equation, different Hamiltonian, etc.
-    println("\n  TwoColour time evolution uses different Liouvillian than Raman.")
-
-    # ... TwoColour-specific time evolution ...
+    println("\n  Time evolution not yet implemented for TwoColourScheme.")
+    println("  (Will use different Liouvillian than StimulatedRamanScheme)")
 
     if output
         results["levels"] = levels
@@ -75,5 +104,3 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
 
     return results
 end
-
-end # module
