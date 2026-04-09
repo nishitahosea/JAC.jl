@@ -259,6 +259,18 @@ function Base.show(io::IO, data::Liouville.DensityMatrixData)
     println(io, "dm:            $(data.dm)  ")
 end
 
+"""
+`Liouville.TwoColourScheme()`  ... constructor for an 'default' instance of a Liouville.TwoColourScheme.
+"""
+
+struct TwoColourScheme <: AbstractLiouvilleScheme
+    levelSelection          ::LevelSelection
+    levelNotations          ::Array{String,1}
+end
+
+function TwoColourScheme()
+    TwoColourScheme(LevelSelection(false), String[])
+end
 
 
 include("module-Liouville-inc-stimulated-raman.jl")
