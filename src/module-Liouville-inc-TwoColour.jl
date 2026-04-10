@@ -195,8 +195,16 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
     levels = initializeLevels(scheme, multiplet)
     densityM = initializeDensityMatrix(levels)
 
+    # ========== NEW CODE: Initialize Hamiltonians ==========
+    atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels)
+    # ======================================================
+
     if computation.settings.printBefore
         displayDensityMatrix(stdout, levels, densityM)
+        # ========== NEW CODE: Display Hamiltonians ==========
+        displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)
+        # ====================================================
     end
 
     println("\n  Two-Color time evolution not yet implemented.")
@@ -205,6 +213,10 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
         results["levels"] = levels
         results["initial_density"] = densityM
         results["pulses"] = computation.pulses
+        # ========== NEW CODE: Add Hamiltonians to results ==========
+        results["atomic_hamiltonian"] = atomicHM
+        results["coupling_hamiltonian"] = couplingHM
+        # ============================================================
     end
 
     println("\n> Two-Color computation setup complete ...")
