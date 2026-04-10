@@ -108,6 +108,62 @@ function displayDensityMatrix(stream, levels::Array{TwoColourLevel,1}, densityM:
     return nothing
 end
 
+
+"""
+`Liouville.initializeAtomicHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1})`
+    ... initialize the atomic Hamiltonian matrix (diagonal energies).
+"""
+function initializeAtomicHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1})
+    noLevels = length(levels)
+    energies = Float64[]
+    hamiltonian = zeros(ComplexF64, noLevels, noLevels)
+
+    # Get energies for all levels
+    for level in levels
+        push!(energies, level.level.energy)
+    end
+
+    # Find lowest energy for reference
+    lowestEn = minimum(energies)
+
+    # Set diagonal elements as excitation energies
+    for n in 1:noLevels
+        hamiltonian[n, n] = energies[n] - lowestEn
+    end
+
+    return hamiltonian
+end
+
+
+"""
+`Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1})`
+    ... initialize the coupling Hamiltonian matrix for two-color XUV+NIR interaction.
+    Returns a Matrix{Function} where each element is a function of time t.
+"""
+function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1})
+    println("==> initializeCouplingHamiltonianMatrix() for Two-Color scheme")
+    noLevels = length(levels)
+    couplingHM = Matrix{Function}(undef, noLevels, noLevels)
+
+    # Initialize all matrix elements to zero function
+    for i in 1:noLevels, j in 1:noLevels
+        couplingHM[i,j] = t -> 0.0 + 0.0im
+    end
+
+    # TODO: Add your coupling matrix elements here
+    # Example for XUV transition: |1> -> |2> (ground to excited)
+    # couplingHM[1,2] = couplingHM[2,1] = t -> XUV_coupling * envelope_XUV(t) * cos(omega_XUV * t)
+
+    # Example for NIR coupling: |2> -> continuum (loss channel)
+    # couplingHM[2,3] = couplingHM[3,2] = t -> NIR_coupling * envelope_NIR(t) * cos(omega_NIR * t)
+
+    @warn("Coupling matrix elements must be set manually for Two-Color scheme")
+
+    return couplingHM
+end
+
+
+
 """
 `Liouville.perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)`
     ... perform two-color XUV+NIR Liouville computation.
@@ -154,4 +210,38 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
     println("\n> Two-Color computation setup complete ...")
 
     return results
+end
+
+
+"""
+`Liouville.displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
+                                     couplingHM::Array{Function, 2})`
+    ... Display the Hamiltonian matrices at a sample time t=0.1.
+"""
+function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
+                                   couplingHM::Array{Function, 2})
+    noLevels = length(levels)
+    totalHamiltonian = [t -> couplingHM[i,j](t) + atomicHM[i,j] for i in 1:noLevels, j in 1:noLevels]
+
+    t = 0.1
+    totalH = [f(t) for f in totalHamiltonian]
+
+    println(stream, " ")
+    println(stream, "  Two-Color Hamiltonian matrix (atomic + coupling), evaluated for t=0.1:")
+    println(stream, " ")
+    for (idx, level) in enumerate(levels)
+        sa = "       " * string(idx) * ")  "
+        sa = sa * string(level.leadingConfig) * "   "
+        sa = sa * string(level.leadingNotation) * "                          "
+        if length(sa) >= 70
+            sa = sa[1:70]
+        end
+        row = totalH[idx, :]
+        for z in row
+            sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))
+        end
+        println(sa)
+    end
+    println(stream, " ")
+    return nothing
 end
