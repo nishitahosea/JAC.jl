@@ -155,19 +155,7 @@ end
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Use PhotoExcitation for bound-bound transitions
-    settings = PhotoExcitation.Settings(
-        [E1], [UseCoulomb], false, false, false, false,
-        LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
-    )
-
-    omega = abs(level_j.energy - level_i.energy)
-
-    if omega < 1e-6
-        return 0.0 + 0.0im
-    end
-
-    # Order: final (higher energy), initial (lower energy)
+    # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
         final_level = level_j
         initial_level = level_i
@@ -176,10 +164,47 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         initial_level = level_j
     end
 
+    omega = abs(level_j.energy - level_i.energy)
+
+    if omega < 1e-6
+        return 0.0 + 0.0im
+    end
+
+    # Convert AngularJ64 to Float64 for calculations
+    Ji = Float64(initial_level.J)
+    Jf = Float64(final_level.J)
+    delta_J = abs(Jf - Ji)
+    parity_change = (final_level.parity != initial_level.parity)
+
+    println("\n=== Dipole Debug ===")
+    println("  initial_level: J=$Ji, parity=$(initial_level.parity), energy=$(initial_level.energy)")
+    println("  final_level:   J=$Jf, parity=$(final_level.parity), energy=$(final_level.energy)")
+    println("  omega = $omega a.u.")
+    println("  delta_J = $delta_J, parity_change = $parity_change")
+    println("  E1 allowed? $(delta_J <= 1.0 && !(delta_J == 0.0 && Ji == 0.0) && parity_change)")
+
+    # Check E1 selection rules
+    if delta_J > 1.0 || (delta_J == 0.0 && Ji == 0.0) || !parity_change
+        println("  → Transition not allowed by E1 selection rules")
+        return 0.0 + 0.0im
+    end
+
+    # Use PhotoExcitation for bound-bound transitions
+    settings = PhotoExcitation.Settings(
+        [E1], [UseCoulomb], false, false, false, false,
+        LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
+    )
+
     channels = PhotoExcitation.determineChannels(final_level, initial_level, settings)
+    println("  Number of channels found: $(length(channels))")
 
     if isempty(channels)
+        println("  → No channels found")
         return 0.0 + 0.0im
+    end
+
+    for ch in channels
+        println("  Channel: multipole=$(ch.multipole), gauge=$(ch.gauge)")
     end
 
     line = PhotoExcitation.Line(initial_level, final_level, omega,
@@ -189,10 +214,12 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
 
     for channel in computed_line.channels
         if channel.multipole == E1 && channel.gauge == Basics.Coulomb
+            println("  → Dipole amplitude = $(channel.amplitude)")
             return channel.amplitude
         end
     end
 
+    println("  → No E1 Coulomb channel found")
     return 0.0 + 0.0im
 end
 
