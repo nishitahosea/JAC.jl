@@ -155,14 +155,11 @@ end
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Determine final (higher energy) and initial (lower energy)
-    if level_j.energy > level_i.energy
-        final_level = level_j
-        initial_level = level_i
-    else
-        final_level = level_i
-        initial_level = level_j
-    end
+    # Use PhotoExcitation for bound-bound transitions
+    settings = PhotoExcitation.Settings(
+        [E1], [UseCoulomb], false, false, false, false,
+        LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
+    )
 
     omega = abs(level_j.energy - level_i.energy)
 
@@ -170,22 +167,14 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         return 0.0 + 0.0im
     end
 
-    # Convert AngularJ64 to Float64 for calculations
-    Ji = Float64(initial_level.J)
-    Jf = Float64(final_level.J)
-    delta_J = abs(Jf - Ji)
-    parity_change = (final_level.parity != initial_level.parity)
-
-    # Check E1 selection rules
-    if delta_J > 1.0 || (delta_J == 0.0 && Ji == 0.0) || !parity_change
-        return 0.0 + 0.0im
+    # Order: final (higher energy), initial (lower energy)
+    if level_j.energy > level_i.energy
+        final_level = level_j
+        initial_level = level_i
+    else
+        final_level = level_i
+        initial_level = level_j
     end
-
-    # Use PhotoExcitation instead of PhotoEmission
-    settings = PhotoExcitation.Settings(
-        [E1], [UseCoulomb], false, false, false, false,
-        LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
-    )
 
     channels = PhotoExcitation.determineChannels(final_level, initial_level, settings)
 
