@@ -2,40 +2,6 @@
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission
 
-function testDipole()
-    println("\n=== Testing Dipole Calculation ===")
-
-    # Setup
-    nm = Nuclear.Model(2.0)
-    grid = Radial.Grid(true)
-    refConfigs = [Configuration("1s"), Configuration("2p")]
-
-    # Compute multiplet
-    multiplet = SelfConsistent.performSCF(refConfigs, nm, grid, AsfSettings())
-
-    # Get 1s and 2p levels
-    level1s = nothing
-    level2p = nothing
-
-    for level in multiplet.levels
-        if level.configuration == Configuration("1s^1")
-            level1s = level
-        elseif level.configuration == Configuration("2p^1")
-            level2p = level
-        end
-    end
-
-    if level1s !== nothing && level2p !== nothing
-        println("1s level: J=$(level1s.J), parity=$(level1s.parity), energy=$(level1s.energy)")
-        println("2p level: J=$(level2p.J), parity=$(level2p.parity), energy=$(level2p.energy)")
-
-        dipole = getDipoleFromPhotoExcitation(level1s, level2p, grid)
-        println("Dipole moment: $dipole a.u.")
-    else
-        println("Could not find 1s and 2p levels")
-    end
-end
-
 # Call this in getDipoleFromPhotoExcitation
 
 # Define missing envelope function
@@ -394,3 +360,43 @@ function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atom
     println(stream, " ")
     return nothing
 end
+
+
+"""
+`Liouville.testDipole()`
+    ... test function to verify dipole calculation between 1s and 2p levels.
+"""
+function testDipole()
+    println("\n=== Testing Dipole Calculation ===")
+
+    # Setup
+    nm = Nuclear.Model(2.0)
+    grid = Radial.Grid(true)
+    refConfigs = [Configuration("1s"), Configuration("2p")]
+    asfSettings = AsfSettings()
+
+    # Compute multiplet
+    multiplet = SelfConsistent.performSCF(refConfigs, nm, grid, asfSettings)
+
+    # Get 1s and 2p levels
+    level1s = nothing
+    level2p = nothing
+
+    for level in multiplet.levels
+        if occursin("1s", string(level.configuration))
+            level1s = level
+            println("Found 1s: J=$(level.J), parity=$(level.parity), energy=$(level.energy)")
+        elseif occursin("2p", string(level.configuration))
+            level2p = level
+            println("Found 2p: J=$(level.J), parity=$(level.parity), energy=$(level.energy)")
+        end
+    end
+
+    if level1s !== nothing && level2p !== nothing
+        dipole = getDipoleFromPhotoExcitation(level1s, level2p, grid)
+        println("Dipole moment (1s → 2p): $dipole a.u.")
+    else
+        println("Could not find 1s and 2p levels")
+    end
+end
+
