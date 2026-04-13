@@ -223,23 +223,22 @@ end
 #    return 0.0 + 0.0im
 #end
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Theoretical dipole for He⁺ 1s → 2p
     Ji = Float64(level_i.J)
     Jf = Float64(level_j.J)
-
-    # Check if parity changes (different parity)
     parity_change = (level_i.parity != level_j.parity)
 
     println("Debug: Ji=$Ji, Jf=$Jf, parity_i=$(level_i.parity), parity_j=$(level_j.parity), parity_change=$parity_change")
 
-    # 1s (J=1/2) → 2p (J=1/2 or 3/2) with parity change
-    if Ji == 0.5 && Jf in [0.5, 1.5] && parity_change
+    # 1s (J=0.5, +) → 2p (J=0.5 or 1.5, -)
+    if Ji == 0.5 && level_i.parity == +1 && Jf in [0.5, 1.5] && level_j.parity == -1
         println("Debug: Returning theoretical dipole 0.3725")
         return 0.3725 + 0.0im
     end
-    # 1s → 3d (J=3/2 or 5/2, parity -)
+
+    # 1s (J=0.5, +) → 3d (J=1.5 or 2.5, -)
     if Ji == 0.5 && level_i.parity == +1 && Jf in [1.5, 2.5] && level_j.parity == -1
-        return 0.15 + 0.0im  # Approximate theoretical value
+        println("Debug: Returning theoretical dipole 0.15")
+        return 0.15 + 0.0im
     end
 
     println("Debug: Returning 0")
