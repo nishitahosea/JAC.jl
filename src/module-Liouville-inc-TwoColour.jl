@@ -2,6 +2,18 @@
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation
 
+# Define missing envelope function
+function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
+    sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
+    wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
+    return exp(-wa) / (sigma * sqrt(2pi))
+end
+
+function gaussianEnvelope(t::Float64, sigma::Float64)
+    wa = t^2 / (2*sigma)^2
+    return exp(-wa) / (sigma * sqrt(2pi))
+end
+
 """
 `struct Liouville.TwoColourLevel`
     ... defines a struct to comprise the level information for a Liouville time evolution in the two-color scheme.
@@ -118,7 +130,7 @@ function initializeAtomicHamiltonianMatrix(scheme::TwoColourScheme, levels::Arra
     energies = Float64[]
     hamiltonian = zeros(ComplexF64, noLevels, noLevels)
 
-    # Get energies for all levels
+    # #=Get=# energies for all levels
     for level in levels
         push!(energies, level.level.energy)
     end
@@ -141,30 +153,13 @@ end
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Debug: Print J values
-    println("Debug: level_i J = $(level_i.J), parity = $(level_i.parity)")
-    println("Debug: level_j J = $(level_j.J), parity = $(level_j.parity)")
-
     # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
         final_level = level_j
         initial_level = level_i
-        println("Debug: Absorption transition: initial J=$(initial_level.J) → final J=$(final_level.J)")
     else
         final_level = level_i
         initial_level = level_j
-        println("Debug: Emission transition: initial J=$(initial_level.J) → final J=$(final_level.J)")
-    end
-
-    # Check E1 selection rules
-    delta_J = abs(final_level.J - initial_level.J)
-    parity_change = (final_level.parity != initial_level.parity)
-
-    println("Debug: ΔJ = $delta_J, Parity change = $parity_change")
-
-    if delta_J > 1.0 || (delta_J == 0.0 && initial_level.J == 0.0) || !parity_change
-        println("Debug: E1 transition not allowed")
-        return 0.0 + 0.0im
     end
 
     omega = abs(level_j.energy - level_i.energy)
@@ -173,10 +168,23 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         return 0.0 + 0.0im
     end
 
-    # Try PhotoEmission.amplitude
+    # Check E1 selection rules
+    # ΔJ = 0, ±1 (but not 0→0)
+    # Parity must change
+    delta_J = abs(final_level.J - initial_level.J)
+    parity_change = (final_level.parity != initial_level.parity)
+
+    # Convert AngularJ64 to Float64 for comparison
+    delta_J_float = Float64(delta_J)
+    initial_J_float = Float64(initial_level.J)
+
+    if delta_J_float > 1.0 || (delta_J_float == 0.0 && initial_J_float == 0.0) || !parity_change
+        return 0.0 + 0.0im  # Transition not allowed
+    end
+
     try
+        # PhotoEmission.amplitude expects (multipole, gauge, omega, finalLevel, initialLevel, grid)
         dipole = PhotoEmission.amplitude(E1, Basics.Coulomb, omega, final_level, initial_level, grid, printout=false)
-        println("Debug: Dipole = $dipole")
         return dipole
     catch e
         @warn "Dipole calculation failed: $e"
