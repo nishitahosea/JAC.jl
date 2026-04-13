@@ -372,6 +372,18 @@ function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atom
 
     t = 0.1
     totalH = [f(t) for f in totalHamiltonian]
+    # Print coupling values explicitly
+    println("\n  Debug: Coupling values at t=0.1:")
+    for i in 1:noLevels
+        for j in 1:noLevels
+            if i != j
+                coupling_value = couplingHM[i,j](0.1)
+                if abs(coupling_value) > 1e-10
+                    println("    H[$i,$j] coupling = $coupling_value a.u.")
+                end
+            end
+        end
+    end
 
     println(stream, " ")
     println(stream, "  Two-Color Hamiltonian matrix (atomic + coupling), evaluated for t=0.1:")
