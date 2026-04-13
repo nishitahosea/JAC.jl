@@ -140,21 +140,17 @@ end
 `Liouville.getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)`
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
+using ..PhotoEmission
+
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Create settings with positional arguments
-    settings = PhotoExcitation.Settings(
-        [E1],                    # multipoles
-        [UseCoulomb],            # gauges
-        false,                   # calcForStokes
-        false,                   # calcPhotonDm
-        false,                   # calcTensors
-        false,                   # printBefore
-        LineSelection(),         # lineSelection
-        0.0,                     # photonEnergyShift
-        0.0,                     # mimimumPhotonEnergy
-        1.0e6,                   # maximumPhotonEnergy
-        Basics.ExpStokes()       # stokes
-    )
+    # Determine final (higher energy) and initial (lower energy)
+    if level_j.energy > level_i.energy
+        final_level = level_j
+        initial_level = level_i
+    else
+        final_level = level_i
+        initial_level = level_j
+    end
 
     omega = abs(level_j.energy - level_i.energy)
 
@@ -162,25 +158,15 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         return 0.0 + 0.0im
     end
 
-    # Determine channels for the transition (final, initial, settings)
-    channels = PhotoExcitation.determineChannels(level_j, level_i, settings)
-
-    if isempty(channels)
+    # Directly use PhotoEmission.amplitude (absorption: final, initial)
+    # amplitude(multipole, gauge, omega, finalLevel, initialLevel, grid)
+    try
+        dipole = PhotoEmission.amplitude(E1, Basics.Coulomb, omega, final_level, initial_level, grid, printout=false)
+        return dipole
+    catch e
+        @warn "Dipole calculation failed: $e"
         return 0.0 + 0.0im
     end
-
-    # Create line and compute amplitudes
-    line = PhotoExcitation.Line(level_i, level_j, omega, EmProperty(0.,0.), EmProperty(0.,0.), TensorComp[], true, channels)
-    computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
-
-    # Extract the E1 Coulomb amplitude
-    for channel in computed_line.channels
-        if channel.multipole == E1 && channel.gauge == Basics.Coulomb
-            return channel.amplitude
-        end
-    end
-
-    return 0.0 + 0.0im
 end
 
 
