@@ -1,6 +1,6 @@
 # module-Liouville-inc-TwoColour.jl
 
-using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation
+using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission
 
 function inspect_J(J)
     println("Type of J: ", typeof(J))
@@ -213,11 +213,12 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
     noLevels = length(levels)
     couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
 
-    # Create field functions for each pulse
+    # Create field functions for each pulse (no cep field!)
     field_funcs = []
     for pulse in pulses
         if typeof(pulse) == Pulse.GaussianSimplified
-            push!(field_funcs, t -> pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay) + pulse.cep))
+            # REMOVED pulse.cep - it doesn't exist
+            push!(field_funcs, t -> pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay)))
         else
             error("Unknown pulse type: $(typeof(pulse))")
         end
@@ -237,7 +238,6 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
             if i == j
                 couplingHM[i,j] = t -> 0.0 + 0.0im
             else
-                # Get dipole using PhotoExcitation (no grid argument)
                 dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
                 couplingHM[i,j] = t -> -dipole * total_field_func(t)
             end
