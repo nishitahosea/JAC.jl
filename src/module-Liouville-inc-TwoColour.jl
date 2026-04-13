@@ -1,6 +1,6 @@
 # module-Liouville-inc-TwoColour.jl
 
-using ..Basics, ..Defaults, ..Pulse
+using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation
 
 """
 `struct Liouville.TwoColourLevel`
@@ -135,36 +135,99 @@ function initializeAtomicHamiltonianMatrix(scheme::TwoColourScheme, levels::Arra
 end
 
 
+
 """
-`Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1})`
+`Liouville.getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)`
+    ... computes electric dipole matrix element using JAC's PhotoExcitation module.
+"""
+function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
+    # Create settings for E1 dipole only
+    settings = PhotoExcitation.Settings(
+        multipoles = [E1],                    # Only electric dipole
+        gauges = [UseCoulomb, UseBabushkin],  # Both gauges for comparison
+        calcForStokes = false,
+        calcPhotonDm = false,
+        calcTensors = false,
+        printBefore = false,
+        lineSelection = LineSelection(),
+        photonEnergyShift = 0.0,
+        mimimumPhotonEnergy = 0.0,
+        maximumPhotonEnergy = 1.0e6,
+        stokes = Basics.ExpStokes()
+    )
+
+    # Create a temporary line for the transition
+    omega = abs(level_j.energy - level_i.energy)
+    channels = PhotoExcitation.determineChannels(level_j, level_i, settings)
+
+    # Create line and compute amplitudes
+    line = PhotoExcitation.Line(level_i, level_j, omega, EmProperty(0.,0.), EmProperty(0.,0.), TensorComp[], true, channels)
+    computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
+
+    # Extract the E1 amplitude (dipole matrix element)
+    dipole_coulomb = 0.0 + 0.0im
+    dipole_babushkin = 0.0 + 0.0im
+
+    for channel in computed_line.channels
+        if channel.multipole == E1 && channel.gauge == Basics.Coulomb
+            dipole_coulomb = channel.amplitude
+        elseif channel.multipole == E1 && channel.gauge == Basics.Babushkin
+            dipole_babushkin = channel.amplitude
+        end
+    end
+
+    # Return the dipole (choose Coulomb or Babushkin, or average)
+    # Note: The amplitude is the reduced matrix element
+    return dipole_coulomb
+end
+
+
+"""
+`Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1}, pulses::Array{Pulse.AbstractPulse, 1})`
     ... initialize the coupling Hamiltonian matrix for two-color XUV+NIR interaction.
-    Returns a Matrix{Function} where each element is a function of time t.
 """
-function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1}, pulses::Array{Pulse.AbstractPulse, 1})
+function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1},
+                                             pulses::Array{Pulse.AbstractPulse, 1}, grid::Radial.Grid)
     noLevels = length(levels)
-    # This matrix stores the functional dependence on time
     couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
 
-    for i = 1:noLevels, j = 1:noLevels
-        if i == j
-            couplingHM[i,j] = t -> 0.0 + 0.0im
+    # Get grid from somewhere (you may need to pass it or store it in scheme)
+    # For now, create a default grid
+    grid = Radial.Grid(true)
+
+    # Create field functions for each pulse
+    field_funcs = []
+    for pulse in pulses
+        if typeof(pulse) == Pulse.GaussianSimplified
+            push!(field_funcs, t -> pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay) + pulse.cep))
         else
-            # 1. Obtain the transition dipole moment <i|D|j>
-            # This is a static value calculated once
-            dipole_ij = InteractionMatrix.getDipoleElement(levels[i].level, levels[j].level)
-#            dipole_ij = PhotoIonization.amplitude("multipole: E1", levels[i].level, levels[j].level)
-            # 2. Define the time-dependent coupling function
-            # This combines the XUV and NIR fields
-            couplingHM[i,j] = t -> begin
-                field = 0.0 + 0.0im
-                for p in pulses
-                    # Evaluate the specific pulse envelope and phase at time t
-                    field += Pulse.getField(t, p)
-                end
-                return dipole_ij * field
+            error("Unknown pulse type: $(typeof(pulse))")
+        end
+    end
+
+    # Total field function
+    total_field_func = t -> begin
+        sum = 0.0
+        for f in field_funcs
+            sum += f(t)
+        end
+        return sum
+    end
+
+    # Build coupling matrix using PhotoExcitation
+    for i in 1:noLevels
+        for j in 1:noLevels
+            if i == j
+                couplingHM[i,j] = t -> 0.0 + 0.0im
+            else
+                # Get dipole using PhotoExcitation
+                dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
+                # V_ij(t) = -d_ij * E_total(t)
+                couplingHM[i,j] = t -> -dipole * total_field_func(t)
             end
         end
     end
+
     return couplingHM
 end
 
