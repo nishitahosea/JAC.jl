@@ -15,7 +15,7 @@ function inspect_J(J)
 end
 
 # Call this in getDipoleFromPhotoExcitation
-inspect_J(initial_level.J)
+
 # Define missing envelope function
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
     sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
