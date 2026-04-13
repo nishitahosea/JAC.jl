@@ -178,17 +178,33 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
 
     # Check E1 selection rules
     if delta_J > 1.0 || (delta_J == 0.0 && Ji == 0.0) || !parity_change
-        return 0.0 + 0.0im  # Transition not allowed
-    end
-
-    try
-        # PhotoEmission.amplitude expects (multipole, gauge, omega, finalLevel, initialLevel, grid)
-        dipole = PhotoEmission.amplitude(E1, Basics.Coulomb, omega, final_level, initial_level, grid, printout=false)
-        return dipole
-    catch e
-        @warn "Dipole calculation failed: $e"
         return 0.0 + 0.0im
     end
+
+    # Use PhotoExcitation instead of PhotoEmission
+    settings = PhotoExcitation.Settings(
+        [E1], [UseCoulomb], false, false, false, false,
+        LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
+    )
+
+    channels = PhotoExcitation.determineChannels(final_level, initial_level, settings)
+
+    if isempty(channels)
+        return 0.0 + 0.0im
+    end
+
+    line = PhotoExcitation.Line(initial_level, final_level, omega,
+                                EmProperty(0.,0.), EmProperty(0.,0.),
+                                TensorComp[], true, channels)
+    computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
+
+    for channel in computed_line.channels
+        if channel.multipole == E1 && channel.gauge == Basics.Coulomb
+            return channel.amplitude
+        end
+    end
+
+    return 0.0 + 0.0im
 end
 
 
