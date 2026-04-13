@@ -393,7 +393,7 @@ function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atom
         end
         row = totalH[idx, :]
         for z in row
-            sa = sa * @sprintf("%8.3f %+8.3fim  ", real(z), imag(z))
+            sa = sa * @sprintf("%8.6f %+8.6fim  ", real(z), imag(z))
         end
         println(sa)
     end
