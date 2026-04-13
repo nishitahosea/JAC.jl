@@ -13,7 +13,7 @@ module Liouville
 
 using  Dates, JLD2, Printf
 using  ..AtomicState, ..Basics, ..BsplinesN, ..Defaults, ..ManyElectron, ..Nuclear, ..Pulse, ..Radial, ..RadialIntegrals, 
-       ..SelfConsistent, ..TableStrings, ..InteractionMatrix
+       ..SelfConsistent, ..TableStrings
 
 
 """
