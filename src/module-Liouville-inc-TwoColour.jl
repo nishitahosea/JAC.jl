@@ -251,6 +251,10 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
         return sum
     end
 
+    # DEBUG: Print field at t=0.1
+    println("\n=== Field Debug ===")
+    println("Total E(0.1) = $(total_field_func(0.1)) a.u.")
+
     # Build coupling matrix
     for i in 1:noLevels
         for j in 1:noLevels
@@ -262,6 +266,7 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
                     couplingHM[i,j] = t -> 0.0 + 0.0im
                 else
                     dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
+                    println("Dipole for ($i,$j) = $dipole a.u.")
                     couplingHM[i,j] = t -> -dipole * total_field_func(t)
                 end
             end
@@ -368,25 +373,16 @@ end
 function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
                                    couplingHM::Array{Function, 2})
     noLevels = length(levels)
-    totalHamiltonian = [t -> couplingHM[i,j](t) + atomicHM[i,j] for i in 1:noLevels, j in 1:noLevels]
 
-    t = 0.1
+    # Choose a time when fields are active
+    # XUV peaks at t=0, so use t=0
+    t = 0.0
+
+    totalHamiltonian = [t -> couplingHM[i,j](t) + atomicHM[i,j] for i in 1:noLevels, j in 1:noLevels]
     totalH = [f(t) for f in totalHamiltonian]
-    # Print coupling values explicitly
-    println("\n  Debug: Coupling values at t=0.1:")
-    for i in 1:noLevels
-        for j in 1:noLevels
-            if i != j
-                coupling_value = couplingHM[i,j](0.1)
-                if abs(coupling_value) > 1e-10
-                    println("    H[$i,$j] coupling = $coupling_value a.u.")
-                end
-            end
-        end
-    end
 
     println(stream, " ")
-    println(stream, "  Two-Color Hamiltonian matrix (atomic + coupling), evaluated for t=0.1:")
+    println(stream, "  Two-Color Hamiltonian matrix (atomic + coupling), evaluated for t=$t:")
     println(stream, " ")
     for (idx, level) in enumerate(levels)
         sa = "       " * string(idx) * ")  "
@@ -441,6 +437,26 @@ function testDipole()
         println("Dipole moment (1s → 2p): $dipole a.u.")
     else
         println("Could not find 1s and 2p levels")
+    end
+end
+
+
+function testField()
+    println("\n=== Testing Field Magnitude ===")
+
+    xuv_pulse = Pulse.FelPulse("GaussianSimplified", 21.0, 1e12, 10.0, 0.0, 0.1)
+    nir_pulse = Pulse.FelPulse("GaussianSimplified", 1.55, 1e14, 10.0, 10.0, 0.1)
+
+    xuv_comp = Pulse.convertPulse(xuv_pulse)
+    nir_comp = Pulse.convertPulse(nir_pulse)
+
+    println("XUV peak at t = $(xuv_comp.timeDelay) a.u.")
+    println("NIR peak at t = $(nir_comp.timeDelay) a.u.")
+
+    for t in [0.0, 100.0, 200.0, 300.0, 400.0, 413.4, 500.0]
+        E_xuv = xuv_comp.A0 * envelope(xuv_comp, t) * cos(xuv_comp.omega * (t - xuv_comp.timeDelay))
+        E_nir = nir_comp.A0 * envelope(nir_comp, t) * cos(nir_comp.omega * (t - nir_comp.timeDelay))
+        println("t = $t: E_xuv = $E_xuv, E_nir = $E_nir, total = $(E_xuv + E_nir)")
     end
 end
 
