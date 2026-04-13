@@ -176,29 +176,20 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         initial_level = level_j
     end
 
-    println("\n=== Debug: Inspecting J values ===")
-    println("initial_level.J:")
-    inspect_J(initial_level.J)
-    println("final_level.J:")
-    inspect_J(final_level.J)
-
     omega = abs(level_j.energy - level_i.energy)
 
     if omega < 1e-6
         return 0.0 + 0.0im
     end
 
-    # Check E1 selection rules
-    # ΔJ = 0, ±1 (but not 0→0)
-    # Parity must change
-    delta_J = abs(final_level.J - initial_level.J)
+    # Convert AngularJ64 to Float64 for calculations
+    Ji = Float64(initial_level.J)
+    Jf = Float64(final_level.J)
+    delta_J = abs(Jf - Ji)
     parity_change = (final_level.parity != initial_level.parity)
 
-    # Convert AngularJ64 to Float64 for comparison
-    delta_J_float = Float64(delta_J)
-    initial_J_float = Float64(initial_level.J)
-
-    if delta_J_float > 1.0 || (delta_J_float == 0.0 && initial_J_float == 0.0) || !parity_change
+    # Check E1 selection rules
+    if delta_J > 1.0 || (delta_J == 0.0 && Ji == 0.0) || !parity_change
         return 0.0 + 0.0im  # Transition not allowed
     end
 
