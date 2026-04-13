@@ -2,6 +2,20 @@
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation
 
+function inspect_J(J)
+    println("Type of J: ", typeof(J))
+    println("Fieldnames: ", fieldnames(typeof(J)))
+    for field in fieldnames(typeof(J))
+        println("  $field = ", getfield(J, field))
+    end
+    # Try all conversion methods
+    try println("  J.value = ", J.value) catch; println("  .value not available") end
+    try println("  Int(J) = ", Int(J)) catch; println("  Int(J) not available") end
+    try println("  Float64(J) = ", Float64(J)) catch; println("  Float64(J) not available") end
+end
+
+# Call this in getDipoleFromPhotoExcitation
+inspect_J(initial_level.J)
 # Define missing envelope function
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
     sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
@@ -161,6 +175,12 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         final_level = level_i
         initial_level = level_j
     end
+
+    println("\n=== Debug: Inspecting J values ===")
+    println("initial_level.J:")
+    inspect_J(initial_level.J)
+    println("final_level.J:")
+    inspect_J(final_level.J)
 
     omega = abs(level_j.energy - level_i.energy)
 
