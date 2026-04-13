@@ -141,13 +141,30 @@ end
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
+    # Debug: Print J values
+    println("Debug: level_i J = $(level_i.J), parity = $(level_i.parity)")
+    println("Debug: level_j J = $(level_j.J), parity = $(level_j.parity)")
+
     # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
         final_level = level_j
         initial_level = level_i
+        println("Debug: Absorption transition: initial J=$(initial_level.J) → final J=$(final_level.J)")
     else
         final_level = level_i
         initial_level = level_j
+        println("Debug: Emission transition: initial J=$(initial_level.J) → final J=$(final_level.J)")
+    end
+
+    # Check E1 selection rules
+    delta_J = abs(final_level.J - initial_level.J)
+    parity_change = (final_level.parity != initial_level.parity)
+
+    println("Debug: ΔJ = $delta_J, Parity change = $parity_change")
+
+    if delta_J > 1.0 || (delta_J == 0.0 && initial_level.J == 0.0) || !parity_change
+        println("Debug: E1 transition not allowed")
+        return 0.0 + 0.0im
     end
 
     omega = abs(level_j.energy - level_i.energy)
@@ -156,10 +173,10 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         return 0.0 + 0.0im
     end
 
-    # Directly use PhotoEmission.amplitude (absorption: final, initial)
-    # amplitude(multipole, gauge, omega, finalLevel, initialLevel, grid)
+    # Try PhotoEmission.amplitude
     try
         dipole = PhotoEmission.amplitude(E1, Basics.Coulomb, omega, final_level, initial_level, grid, printout=false)
+        println("Debug: Dipole = $dipole")
         return dipole
     catch e
         @warn "Dipole calculation failed: $e"
