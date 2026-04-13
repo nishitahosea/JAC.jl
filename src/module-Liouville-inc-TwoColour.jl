@@ -140,28 +140,60 @@ end
     ... initialize the coupling Hamiltonian matrix for two-color XUV+NIR interaction.
     Returns a Matrix{Function} where each element is a function of time t.
 """
-function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1})
-    println("==> initializeCouplingHamiltonianMatrix() for Two-Color scheme")
+function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1}, pulses::Array{Pulse.AbstractPulse, 1})
     noLevels = length(levels)
-    couplingHM = Matrix{Function}(undef, noLevels, noLevels)
+    # This matrix stores the functional dependence on time
+    couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
 
-    # Initialize all matrix elements to zero function
-    for i in 1:noLevels, j in 1:noLevels
-        couplingHM[i,j] = t -> 0.0 + 0.0im
+    for i = 1:noLevels, j = 1:noLevels
+        if i == j
+            couplingHM[i,j] = t -> 0.0 + 0.0im
+        else
+            # 1. Obtain the transition dipole moment <i|D|j>
+            # This is a static value calculated once
+            dipole_ij = InteractionMatrix.getDipoleElement(levels[i].level, levels[j].level)
+
+            # 2. Define the time-dependent coupling function
+            # This combines the XUV and NIR fields
+            couplingHM[i,j] = t -> begin
+                field = 0.0 + 0.0im
+                for p in pulses
+                    # Evaluate the specific pulse envelope and phase at time t
+                    field += Pulse.getField(t, p)
+                end
+                return dipole_ij * field
+            end
+        end
     end
-
-    # TODO: Add your coupling matrix elements here
-    # Example for XUV transition: |1> -> |2> (ground to excited)
-    # couplingHM[1,2] = couplingHM[2,1] = t -> XUV_coupling * envelope_XUV(t) * cos(omega_XUV * t)
-
-    # Example for NIR coupling: |2> -> continuum (loss channel)
-    # couplingHM[2,3] = couplingHM[3,2] = t -> NIR_coupling * envelope_NIR(t) * cos(omega_NIR * t)
-
-    @warn("Coupling matrix elements must be set manually for Two-Color scheme")
-
     return couplingHM
 end
 
+
+function computeInteractionMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1})
+    noLevels = length(levels)
+    couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
+
+    # Initialize with zero functions
+    for i = 1:noLevels, j = 1:noLevels
+        couplingHM[i,j] = t -> 0.0 + 0.0im
+    end
+
+    for i = 1:noLevels, j = 1:noLevels
+        if i == j continue end
+
+        # 1. Calculate the static dipole matrix element <i|d|j>
+        # You would use JAC's InteractionMatrix tools here
+        dipoleElement = PhotoIonization.amplitude("multipole: E1", levels[i].level, levels[j].level)
+
+        # 2. Assign the time-dependent coupling
+        # Pulse 1 (XUV) and Pulse 2 (IR)
+        p1 = scheme.pulses[1]
+        p2 = scheme.pulses[2]
+
+        couplingHM[i,j] = t -> dipoleElement * (Pulse.getAmplitude(t, p1) + Pulse.getAmplitude(t, p2))
+    end
+    return couplingHM
+end
 
 
 """
@@ -197,7 +229,7 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
 
     # ========== NEW CODE: Initialize Hamiltonians ==========
     atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
-    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels)
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses) # Pass the 'pulses' array here
     # ======================================================
 
     if computation.settings.printBefore

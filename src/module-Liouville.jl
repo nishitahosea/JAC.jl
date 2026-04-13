@@ -266,6 +266,7 @@ end
 struct TwoColourScheme <: AbstractLiouvilleScheme
     levelSelection          ::LevelSelection
     levelNotations          ::Array{String,1}
+    pulses                  ::Array{Pulse.AbstractPulse, 1} # To hold XUV and IR pulses
 end
 
 function TwoColourScheme()
