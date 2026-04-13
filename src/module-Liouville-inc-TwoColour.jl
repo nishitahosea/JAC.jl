@@ -187,7 +187,7 @@ end
     ... initialize the coupling Hamiltonian matrix for two-color XUV+NIR interaction.
 """
 function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1},
-                                             pulses::Array{Pulse.AbstractPulse, 1}, grid::Radial.Grid)
+                                             pulses::Array{Pulse.AbstractPulse, 1})
     noLevels = length(levels)
     couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
 
@@ -292,7 +292,7 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
 
     # ========== NEW CODE: Initialize Hamiltonians ==========
     atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
-    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, computation.grid) # Pass the 'pulses' array here
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses) # Pass the 'pulses' array here
     # ======================================================
 
     if computation.settings.printBefore
