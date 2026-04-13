@@ -140,45 +140,52 @@ end
 `Liouville.getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)`
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
-function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Create settings for E1 dipole only
+function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level)
+    # Create settings using POSITIONAL arguments (no keywords!)
+    # Settings(multipoles, gauges, calcForStokes, calcPhotonDm, calcTensors,
+    #          printBefore, lineSelection, photonEnergyShift,
+    #          mimimumPhotonEnergy, maximumPhotonEnergy, stokes)
+
     settings = PhotoExcitation.Settings(
-        multipoles = [E1],                    # Only electric dipole
-        gauges = [UseCoulomb, UseBabushkin],  # Both gauges for comparison
-        calcForStokes = false,
-        calcPhotonDm = false,
-        calcTensors = false,
-        printBefore = false,
-        lineSelection = LineSelection(),
-        photonEnergyShift = 0.0,
-        mimimumPhotonEnergy = 0.0,
-        maximumPhotonEnergy = 1.0e6,
-        stokes = Basics.ExpStokes()
+        [E1],                    # multipoles
+        [UseCoulomb],            # gauges
+        false,                   # calcForStokes
+        false,                   # calcPhotonDm
+        false,                   # calcTensors
+        false,                   # printBefore
+        LineSelection(),         # lineSelection
+        0.0,                     # photonEnergyShift
+        0.0,                     # mimimumPhotonEnergy
+        1.0e6,                   # maximumPhotonEnergy
+        Basics.ExpStokes()       # stokes
     )
 
-    # Create a temporary line for the transition
     omega = abs(level_j.energy - level_i.energy)
+
+    # Skip if energy difference is too small
+    if omega < 1e-6
+        return 0.0 + 0.0im
+    end
+
     channels = PhotoExcitation.determineChannels(level_j, level_i, settings)
 
-    # Create line and compute amplitudes
-    line = PhotoExcitation.Line(level_i, level_j, omega, EmProperty(0.,0.), EmProperty(0.,0.), TensorComp[], true, channels)
-    computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
+    if isempty(channels)
+        return 0.0 + 0.0im
+    end
 
-    # Extract the E1 amplitude (dipole matrix element)
-    dipole_coulomb = 0.0 + 0.0im
-    dipole_babushkin = 0.0 + 0.0im
+    # Create a temporary grid (since PhotoExcitation needs it)
+    temp_grid = Radial.Grid(true)
+
+    line = PhotoExcitation.Line(level_i, level_j, omega, EmProperty(0.,0.), EmProperty(0.,0.), TensorComp[], true, channels)
+    computed_line = PhotoExcitation.computeAmplitudesProperties(line, temp_grid, settings, printout=false)
 
     for channel in computed_line.channels
         if channel.multipole == E1 && channel.gauge == Basics.Coulomb
-            dipole_coulomb = channel.amplitude
-        elseif channel.multipole == E1 && channel.gauge == Basics.Babushkin
-            dipole_babushkin = channel.amplitude
+            return channel.amplitude
         end
     end
 
-    # Return the dipole (choose Coulomb or Babushkin, or average)
-    # Note: The amplitude is the reduced matrix element
-    return dipole_coulomb
+    return 0.0 + 0.0im
 end
 
 
@@ -191,10 +198,6 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
     noLevels = length(levels)
     couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
 
-    # Get grid from somewhere (you may need to pass it or store it in scheme)
-    # For now, create a default grid
-    grid = Radial.Grid(true)
-
     # Create field functions for each pulse
     field_funcs = []
     for pulse in pulses
@@ -205,7 +208,6 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
         end
     end
 
-    # Total field function
     total_field_func = t -> begin
         sum = 0.0
         for f in field_funcs
@@ -214,15 +216,14 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
         return sum
     end
 
-    # Build coupling matrix using PhotoExcitation
+    # Build coupling matrix
     for i in 1:noLevels
         for j in 1:noLevels
             if i == j
                 couplingHM[i,j] = t -> 0.0 + 0.0im
             else
-                # Get dipole using PhotoExcitation
-                dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
-                # V_ij(t) = -d_ij * E_total(t)
+                # Get dipole using PhotoExcitation (no grid argument)
+                dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level)
                 couplingHM[i,j] = t -> -dipole * total_field_func(t)
             end
         end
