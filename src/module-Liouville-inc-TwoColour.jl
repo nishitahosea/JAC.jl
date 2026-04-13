@@ -2,16 +2,38 @@
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission
 
-function inspect_J(J)
-    println("Type of J: ", typeof(J))
-    println("Fieldnames: ", fieldnames(typeof(J)))
-    for field in fieldnames(typeof(J))
-        println("  $field = ", getfield(J, field))
+function testDipole()
+    println("\n=== Testing Dipole Calculation ===")
+
+    # Setup
+    nm = Nuclear.Model(2.0)
+    grid = Radial.Grid(true)
+    refConfigs = [Configuration("1s"), Configuration("2p")]
+
+    # Compute multiplet
+    multiplet = SelfConsistent.performSCF(refConfigs, nm, grid, AsfSettings())
+
+    # Get 1s and 2p levels
+    level1s = nothing
+    level2p = nothing
+
+    for level in multiplet.levels
+        if level.configuration == Configuration("1s^1")
+            level1s = level
+        elseif level.configuration == Configuration("2p^1")
+            level2p = level
+        end
     end
-    # Try all conversion methods
-    try println("  J.value = ", J.value) catch; println("  .value not available") end
-    try println("  Int(J) = ", Int(J)) catch; println("  Int(J) not available") end
-    try println("  Float64(J) = ", Float64(J)) catch; println("  Float64(J) not available") end
+
+    if level1s !== nothing && level2p !== nothing
+        println("1s level: J=$(level1s.J), parity=$(level1s.parity), energy=$(level1s.energy)")
+        println("2p level: J=$(level2p.J), parity=$(level2p.parity), energy=$(level2p.energy)")
+
+        dipole = getDipoleFromPhotoExcitation(level1s, level2p, grid)
+        println("Dipole moment: $dipole a.u.")
+    else
+        println("Could not find 1s and 2p levels")
+    end
 end
 
 # Call this in getDipoleFromPhotoExcitation
@@ -213,11 +235,10 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
     noLevels = length(levels)
     couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
 
-    # Create field functions for each pulse (no cep field!)
+    # Create field functions for each pulse
     field_funcs = []
     for pulse in pulses
         if typeof(pulse) == Pulse.GaussianSimplified
-            # REMOVED pulse.cep - it doesn't exist
             push!(field_funcs, t -> pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay)))
         else
             error("Unknown pulse type: $(typeof(pulse))")
@@ -238,8 +259,13 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
             if i == j
                 couplingHM[i,j] = t -> 0.0 + 0.0im
             else
-                dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
-                couplingHM[i,j] = t -> -dipole * total_field_func(t)
+                # Skip if either level is the loss channel (energy == 0.0)
+                if levels[i].level.energy == 0.0 || levels[j].level.energy == 0.0
+                    couplingHM[i,j] = t -> 0.0 + 0.0im
+                else
+                    dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
+                    couplingHM[i,j] = t -> -dipole * total_field_func(t)
+                end
             end
         end
     end
