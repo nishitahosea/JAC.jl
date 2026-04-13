@@ -151,8 +151,8 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
         else
             # 1. Obtain the transition dipole moment <i|D|j>
             # This is a static value calculated once
-            #dipole_ij = InteractionMatrix.getDipoleElement(levels[i].level, levels[j].level)
-            dipole_ij = PhotoIonization.amplitude("multipole: E1", levels[i].level, levels[j].level)
+            dipole_ij = InteractionMatrix.getDipoleElement(levels[i].level, levels[j].level)
+#            dipole_ij = PhotoIonization.amplitude("multipole: E1", levels[i].level, levels[j].level)
             # 2. Define the time-dependent coupling function
             # This combines the XUV and NIR fields
             couplingHM[i,j] = t -> begin
