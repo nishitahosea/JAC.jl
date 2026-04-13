@@ -140,12 +140,8 @@ end
 `Liouville.getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)`
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
-function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level)
-    # Create settings using POSITIONAL arguments (no keywords!)
-    # Settings(multipoles, gauges, calcForStokes, calcPhotonDm, calcTensors,
-    #          printBefore, lineSelection, photonEnergyShift,
-    #          mimimumPhotonEnergy, maximumPhotonEnergy, stokes)
-
+function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
+    # Create settings with positional arguments
     settings = PhotoExcitation.Settings(
         [E1],                    # multipoles
         [UseCoulomb],            # gauges
@@ -162,23 +158,22 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level)
 
     omega = abs(level_j.energy - level_i.energy)
 
-    # Skip if energy difference is too small
     if omega < 1e-6
         return 0.0 + 0.0im
     end
 
+    # Determine channels for the transition (final, initial, settings)
     channels = PhotoExcitation.determineChannels(level_j, level_i, settings)
 
     if isempty(channels)
         return 0.0 + 0.0im
     end
 
-    # Create a temporary grid (since PhotoExcitation needs it)
-    temp_grid = Radial.Grid(true)
-
+    # Create line and compute amplitudes
     line = PhotoExcitation.Line(level_i, level_j, omega, EmProperty(0.,0.), EmProperty(0.,0.), TensorComp[], true, channels)
-    computed_line = PhotoExcitation.computeAmplitudesProperties(line, temp_grid, settings, printout=false)
+    computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
 
+    # Extract the E1 Coulomb amplitude
     for channel in computed_line.channels
         if channel.multipole == E1 && channel.gauge == Basics.Coulomb
             return channel.amplitude
@@ -194,7 +189,7 @@ end
     ... initialize the coupling Hamiltonian matrix for two-color XUV+NIR interaction.
 """
 function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1},
-                                             pulses::Array{Pulse.AbstractPulse, 1})
+                                             pulses::Array{Pulse.AbstractPulse, 1}, grid::Radial.Grid)
     noLevels = length(levels)
     couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
 
@@ -223,7 +218,7 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
                 couplingHM[i,j] = t -> 0.0 + 0.0im
             else
                 # Get dipole using PhotoExcitation (no grid argument)
-                dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level)
+                dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
                 couplingHM[i,j] = t -> -dipole * total_field_func(t)
             end
         end
