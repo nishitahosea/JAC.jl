@@ -392,10 +392,7 @@ end
 function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
                                    couplingHM::Array{Function, 2})
     noLevels = length(levels)
-
-    # Choose a time when fields are active
-    # XUV peaks at t=0, so use t=0
-    t = 0.0
+    t = 0.0  # XUV peaks at t=0
 
     totalHamiltonian = [t -> couplingHM[i,j](t) + atomicHM[i,j] for i in 1:noLevels, j in 1:noLevels]
     totalH = [f(t) for f in totalHamiltonian]
@@ -412,7 +409,8 @@ function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atom
         end
         row = totalH[idx, :]
         for z in row
-            sa = sa * @sprintf("%8.6f %+8.6fim  ", real(z), imag(z))
+            # Change from %8.6f to %10.8f to see more decimal places
+            sa = sa * @sprintf("%10.8f %+10.8fim  ", real(z), imag(z))
         end
         println(sa)
     end
