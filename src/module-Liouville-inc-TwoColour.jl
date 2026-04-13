@@ -140,8 +140,6 @@ end
 `Liouville.getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)`
     ... computes electric dipole matrix element using JAC's PhotoExcitation module.
 """
-using ..PhotoEmission
-
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
     # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
