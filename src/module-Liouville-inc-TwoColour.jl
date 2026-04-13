@@ -288,7 +288,7 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
 
     # ========== NEW CODE: Initialize Hamiltonians ==========
     atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
-    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, grid) # Pass the 'pulses' array here
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, computation.grid) # Pass the 'pulses' array here
     # ======================================================
 
     if computation.settings.printBefore
