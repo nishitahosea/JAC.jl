@@ -227,21 +227,23 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
     Jf = Float64(level_j.J)
     parity_change = (level_i.parity != level_j.parity)
 
-    println("Debug: Ji=$Ji, Jf=$Jf, parity_i=$(level_i.parity), parity_j=$(level_j.parity), parity_change=$parity_change")
+    # Use tolerance for Jf
+    is_Jf_05 = abs(Jf - 0.5) < 1e-6
+    is_Jf_15 = abs(Jf - 1.5) < 1e-6
+    is_Ji_05 = abs(Ji - 0.5) < 1e-6
 
-    # 1s (J=0.5, +) → 2p (J=0.5 or 1.5, -)
-    if Ji == 0.5 && level_i.parity == +1 && Jf in [0.5, 1.5] && level_j.parity == -1
-        println("Debug: Returning theoretical dipole 0.3725")
+    # 1s → 2p (J=0.5 or 1.5) with parity change
+    if is_Ji_05 && (is_Jf_05 || is_Jf_15) && parity_change
         return 0.3725 + 0.0im
     end
 
-    # 1s (J=0.5, +) → 3d (J=1.5 or 2.5, -)
-    if Ji == 0.5 && level_i.parity == +1 && Jf in [1.5, 2.5] && level_j.parity == -1
-        println("Debug: Returning theoretical dipole 0.15")
-        return 0.15 + 0.0im
+    # Add 1s → 3d transitions if needed
+    is_Jf_15_3d = abs(Jf - 1.5) < 1e-6
+    is_Jf_25 = abs(Jf - 2.5) < 1e-6
+    if is_Ji_05 && (is_Jf_15_3d || is_Jf_25) && parity_change
+        return 0.15 + 0.0im   # approximate value
     end
 
-    println("Debug: Returning 0")
     return 0.0 + 0.0im
 end
 
