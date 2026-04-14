@@ -223,7 +223,7 @@ end
 #    return 0.0 + 0.0im
 #end
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Determine final (higher energy) and initial (lower energy)
+    # 1. Determine energy ordering
     if level_j.energy > level_i.energy
         final_level = level_j
         initial_level = level_i
@@ -237,32 +237,35 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         return 0.0 + 0.0im
     end
 
-    # Use PhotoExcitation to compute the line
+    # 2. Setup Settings for E1 transition in Coulomb gauge
+    # We use the standard JAC settings for photo-excitation
     settings = PhotoExcitation.Settings(
         [E1], [UseCoulomb], false, false, false, false,
         LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
     )
+
+    # 3. Determine and compute the line properties
     channels = PhotoExcitation.determineChannels(final_level, initial_level, settings)
     if isempty(channels)
         return 0.0 + 0.0im
     end
+
     line = PhotoExcitation.Line(initial_level, final_level, omega,
                                 EmProperty(0.,0.), EmProperty(0.,0.),
                                 TensorComp[], true, channels)
+
     computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
 
-    # Extract oscillator strength (Coulomb gauge)
-    f = computed_line.oscStrength.Coulomb
-    if f <= 0.0
+    # 4. Extract the Complex Reduced Matrix Element
+    # In JAC, for a single E1 channel, this amplitude contains the phase.
+    if !isempty(computed_line.multipoleAmplitudes)
+        # We take the first amplitude corresponding to E1
+        d_complex = computed_line.multipoleAmplitudes[1].value
+        return d_complex
+    else
         return 0.0 + 0.0im
     end
-
-    # Compute dipole from oscillator strength: f = (2/3) ω |d|^2  => |d| = sqrt(3f/(2ω))
-    d_abs = sqrt(3 * f / (2 * omega))
-    # The sign is arbitrary; we take it real positive (phase can be chosen)
-    return d_abs + 0.0im
 end
-
 
 """
 `Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1}, pulses::Array{Pulse.AbstractPulse, 1})`
