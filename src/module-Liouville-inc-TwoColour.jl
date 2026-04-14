@@ -317,14 +317,17 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
                 if levels[i].level.energy == 0.0 || levels[j].level.energy == 0.0
                     couplingHM[i,j] = t -> 0.0 + 0.0im
                 else
-                    dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
-                    println("Dipole for ($i,$j) = $dipole a.u.")
+                    # Ensure Hermiticity: always compute dipole from lower to higher energy
+                    if levels[i].level.energy < levels[j].level.energy
+                        dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
+                    else
+                        dipole = conj(getDipoleFromPhotoExcitation(levels[j].level, levels[i].level, grid))
+                    end
                     couplingHM[i,j] = t -> -dipole * total_field_func(t)
                 end
             end
         end
     end
-
     return couplingHM
 end
 
