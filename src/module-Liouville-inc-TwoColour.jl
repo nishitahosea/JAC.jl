@@ -223,28 +223,44 @@ end
 #    return 0.0 + 0.0im
 #end
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    Ji = Float64(level_i.J)
-    Jf = Float64(level_j.J)
-    parity_change = (level_i.parity != level_j.parity)
-
-    # Use tolerance for Jf
-    is_Jf_05 = abs(Jf - 0.5) < 1e-6
-    is_Jf_15 = abs(Jf - 1.5) < 1e-6
-    is_Ji_05 = abs(Ji - 0.5) < 1e-6
-
-    # 1s → 2p (J=0.5 or 1.5) with parity change
-    if is_Ji_05 && (is_Jf_05 || is_Jf_15) && parity_change
-        return 0.3725 + 0.0im
+    # Determine final (higher energy) and initial (lower energy)
+    if level_j.energy > level_i.energy
+        final_level = level_j
+        initial_level = level_i
+    else
+        final_level = level_i
+        initial_level = level_j
     end
 
-    # Add 1s → 3d transitions if needed
-    is_Jf_15_3d = abs(Jf - 1.5) < 1e-6
-    is_Jf_25 = abs(Jf - 2.5) < 1e-6
-    if is_Ji_05 && (is_Jf_15_3d || is_Jf_25) && parity_change
-        return 0.15 + 0.0im   # approximate value
+    omega = abs(level_j.energy - level_i.energy)
+    if omega < 1e-6
+        return 0.0 + 0.0im
     end
 
-    return 0.0 + 0.0im
+    # Use PhotoExcitation to compute the line
+    settings = PhotoExcitation.Settings(
+        [E1], [UseCoulomb], false, false, false, false,
+        LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
+    )
+    channels = PhotoExcitation.determineChannels(final_level, initial_level, settings)
+    if isempty(channels)
+        return 0.0 + 0.0im
+    end
+    line = PhotoExcitation.Line(initial_level, final_level, omega,
+                                EmProperty(0.,0.), EmProperty(0.,0.),
+                                TensorComp[], true, channels)
+    computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
+
+    # Extract oscillator strength (Coulomb gauge)
+    f = computed_line.oscStrength.Coulomb
+    if f <= 0.0
+        return 0.0 + 0.0im
+    end
+
+    # Compute dipole from oscillator strength: f = (2/3) ω |d|^2  => |d| = sqrt(3f/(2ω))
+    d_abs = sqrt(3 * f / (2 * omega))
+    # The sign is arbitrary; we take it real positive (phase can be chosen)
+    return d_abs + 0.0im
 end
 
 
