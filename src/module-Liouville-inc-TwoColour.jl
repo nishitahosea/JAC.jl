@@ -223,7 +223,7 @@ end
 #    return 0.0 + 0.0im
 #end
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # 1. Determine energy ordering
+    # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
         final_level = level_j
         initial_level = level_i
@@ -237,35 +237,44 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
         return 0.0 + 0.0im
     end
 
-    # 2. Setup Settings for E1 transition in Coulomb gauge
-    # We use the standard JAC settings for photo-excitation
+    # Use PhotoExcitation to compute the line
     settings = PhotoExcitation.Settings(
         [E1], [UseCoulomb], false, false, false, false,
         LineSelection(), 0.0, 0.0, 1.0e6, Basics.ExpStokes()
     )
-
-    # 3. Determine and compute the line properties
     channels = PhotoExcitation.determineChannels(final_level, initial_level, settings)
     if isempty(channels)
         return 0.0 + 0.0im
     end
-
     line = PhotoExcitation.Line(initial_level, final_level, omega,
                                 EmProperty(0.,0.), EmProperty(0.,0.),
                                 TensorComp[], true, channels)
-
     computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
 
-    # 4. Extract the Complex Reduced Matrix Element
-    # In JAC, for a single E1 channel, this amplitude contains the phase.
-    if !isempty(computed_line.multipoleAmplitudes)
-        # We take the first amplitude corresponding to E1
-        d_complex = computed_line.multipoleAmplitudes[1].value
-        return d_complex
-    else
+    # Extract oscillator strength (Coulomb gauge) – gives correct magnitude
+    f = computed_line.oscStrength.Coulomb
+    if f <= 0.0
         return 0.0 + 0.0im
     end
+
+    # Magnitude from oscillator strength: |d| = sqrt(3f/(2ω))
+    d_mag = sqrt(3 * f / (2 * omega))
+
+    # Extract phase from the raw amplitude of the first E1 Coulomb channel
+    phase = 1.0 + 0.0im
+    for channel in computed_line.channels
+        if channel.multipole == E1 && channel.gauge == Basics.Coulomb
+            amp = channel.amplitude
+            if abs(amp) > 1e-12
+                phase = amp / abs(amp)   # unit complex number (e^{iφ})
+            end
+            break
+        end
+    end
+
+    return d_mag * phase
 end
+
 
 """
 `Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1}, pulses::Array{Pulse.AbstractPulse, 1})`
