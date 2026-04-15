@@ -35,6 +35,7 @@ function Base.show(io::IO, level::TwoColourLevel)
     println(io, "leadingConfig:          $(level.leadingConfig)")
     println(io, "leadingNotation:        $(level.leadingNotation)")
     println(io, "level:                  $(level.level)")
+    println(io, "isContinuum:            $(level.isContinuum)")
 end
 
 """
@@ -55,7 +56,7 @@ function initializeLevels(scheme::TwoColourScheme, multiplet::Multiplet)
             if index == level.index
                 leadingConf = Basics.extractConfiguration(Basics.LeadingConfiguration(), level)
                 liouvLevel = TwoColourLevel(leadingConf, scheme.levelNotations[idx], level)
-                push!(liouvilleLevels, liouvLevel)
+                push!(liouvilleLevels, TwoColourLevel(Configuration("[He]"), scheme.levelNotations[end], Level(), false))
             end
         end
     end
