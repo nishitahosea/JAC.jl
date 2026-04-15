@@ -28,7 +28,7 @@ struct TwoColourLevel
 end
 
 function TwoColourLevel()
-    TwoColourLevel(Configuration(), "xx", Level())
+    TwoColourLevel(Configuration(), "xx", Level(), false)
 end
 
 function Base.show(io::IO, level::TwoColourLevel)
@@ -56,7 +56,7 @@ function initializeLevels(scheme::TwoColourScheme, multiplet::Multiplet)
             if index == level.index
                 leadingConf = Basics.extractConfiguration(Basics.LeadingConfiguration(), level)
                 liouvLevel = TwoColourLevel(leadingConf, scheme.levelNotations[idx], level, false)
-                push!(liouvilleLevels, liouvLevel))
+                push!(liouvilleLevels, liouvLevel)
             end
         end
     end
