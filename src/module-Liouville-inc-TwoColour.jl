@@ -1,6 +1,6 @@
 # module-Liouville-inc-TwoColour.jl
 
-using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission
+using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission, ..PhotoIonization, ..Continuum, ..Nuclear
 
 # Call this in getDipoleFromPhotoExcitation
 
@@ -277,17 +277,59 @@ function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radi
 end
 
 
+function getDipoleBoundContinuum(boundLevel::Level, contLevel::Level, grid::Radial.Grid, nm::Nuclear.Model)
+    # Energy difference (photon energy)
+    omega = abs(contLevel.energy - boundLevel.energy)
+    if omega < 1e-8
+        return 0.0 + 0.0im
+    end
+
+    # Extract kappa from the continuum level (assuming it contains exactly one extra electron)
+    # This depends on how you build the continuum level; adapt as needed.
+    extraElectrons = Basics.extraElectrons(contLevel.basis, boundLevel.basis)  # you may need a helper
+    if length(extraElectrons) != 1
+        error("Continuum level does not have exactly one extra electron.")
+    end
+    kappa = extraElectrons[1].subshell.kappa
+
+    # Build the photoionization channel
+    sym = LevelSymmetry(contLevel.J, contLevel.parity)
+    channel = PhotoIonization.Channel(E1, Basics.Coulomb, kappa, sym, 0.0, 0.0+0.0im)
+
+    # Compute amplitude
+    amp = PhotoIonization.amplitude("photoionization", channel, omega, contLevel, boundLevel, grid)
+    return amp
+end
+
 """
 `Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1}, pulses::Array{Pulse.AbstractPulse, 1})`
     ... initialize the coupling Hamiltonian matrix for two-color XUV+NIR interaction.
 """
-function initializeCouplingHamiltonianMatrix(scheme, levels, pulses, grid, nm)
+function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1},
+                                             pulses::Array{Pulse.AbstractPulse,1}, grid::Radial.Grid, nm::Nuclear.Model)
     noLevels = length(levels)
     couplingHM = Array{Function,2}(undef, noLevels, noLevels)
 
-    # Precompute field function (same as before)
-    field_funcs = ...
-    total_field_func = t -> sum(f(t) for f in field_funcs)
+    # Create field functions for each pulse
+    field_funcs = []
+    for pulse in pulses
+        if typeof(pulse) == Pulse.GaussianSimplified
+            push!(field_funcs, t -> pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay)))
+        else
+            error("Unknown pulse type: $(typeof(pulse))")
+        end
+    end
+
+    total_field_func = t -> begin
+        s = 0.0
+        for f in field_funcs
+            s += f(t)
+        end
+        return s
+    end
+
+    # Precompute dipole elements for bound-bound pairs (optional caching)
+    # We compute them on the fly for simplicity.
 
     for i in 1:noLevels, j in 1:noLevels
         if i == j
@@ -295,35 +337,41 @@ function initializeCouplingHamiltonianMatrix(scheme, levels, pulses, grid, nm)
             continue
         end
 
-        li = levels[i]; lj = levels[j]
+        li = levels[i]
+        lj = levels[j]
 
-        # Skip if either is the dummy loss channel (energy == 0)
+        # Skip if either level is the dummy loss channel (energy == 0.0)
         if li.level.energy == 0.0 || lj.level.energy == 0.0
             couplingHM[i,j] = t -> 0.0 + 0.0im
             continue
         end
 
-        # Determine dipole matrix element
         dipole = 0.0 + 0.0im
-        if !li.isContinuum && !lj.isContinuum
-            # Bound-bound
+
+        # Determine whether each level is bound or continuum
+        # We assume li.isContinuum and lj.isContinuum are defined (as Booleans) in TwoColourLevel.
+        # If not yet added, you must add that field to the struct.
+        bound_i = !li.isContinuum
+        bound_j = !lj.isContinuum
+
+        if bound_i && bound_j
+            # Bound-bound coupling (excitation)
             if li.level.energy < lj.level.energy
                 dipole = getDipoleFromPhotoExcitation(li.level, lj.level, grid)
             else
                 dipole = conj(getDipoleFromPhotoExcitation(lj.level, li.level, grid))
             end
-        elseif li.isContinuum && !lj.isContinuum
-            # lj is bound, li is continuum → transition is from bound to continuum
-            dipole = conj(getDipoleBoundContinuum(lj.level, li.level, grid))
-        elseif !li.isContinuum && lj.isContinuum
-            # li is bound, lj is continuum
-            dipole = getDipoleBoundContinuum(li.level, lj.level, grid)
+        elseif bound_i && !bound_j
+            # i is bound, j is continuum → ionization from i to j
+            dipole = getDipoleBoundContinuum(li.level, lj.level, grid, nm)
+        elseif !bound_i && bound_j
+            # i is continuum, j is bound → recombination (conjugate of ionization)
+            dipole = conj(getDipoleBoundContinuum(lj.level, li.level, grid, nm))
         else
-            # Both continuum → set to zero for now
+            # Both continuum → free-free transitions (neglected for now)
             dipole = 0.0 + 0.0im
         end
 
-        # Assign time-dependent coupling
         couplingHM[i,j] = t -> -dipole * total_field_func(t)
     end
 
@@ -391,7 +439,7 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
 
     # ========== NEW CODE: Initialize Hamiltonians ==========
     atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
-    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, computation.grid) # Pass the 'pulses' array here
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, computation.grid, computation.nuclearModel) # Pass the 'pulses' array here
     # ======================================================
 
     if computation.settings.printBefore
