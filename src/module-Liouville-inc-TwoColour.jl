@@ -55,14 +55,14 @@ function initializeLevels(scheme::TwoColourScheme, multiplet::Multiplet)
         for level in multiplet.levels
             if index == level.index
                 leadingConf = Basics.extractConfiguration(Basics.LeadingConfiguration(), level)
-                liouvLevel = TwoColourLevel(leadingConf, scheme.levelNotations[idx], level)
-                push!(liouvilleLevels, TwoColourLevel(Configuration("[He]"), scheme.levelNotations[end], Level(), false))
+                liouvLevel = TwoColourLevel(leadingConf, scheme.levelNotations[idx], level, false)
+                push!(liouvilleLevels, liouvLevel))
             end
         end
     end
 
     # Add a loss channel (ionization continuum)
-    push!(liouvilleLevels, TwoColourLevel(Configuration("[He]"), scheme.levelNotations[end], Level()))
+    push!(liouvilleLevels, TwoColourLevel(Configuration("[He]"), scheme.levelNotations[end], Level(), false))
 
     # Display levels
     println(" ")
