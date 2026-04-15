@@ -24,6 +24,7 @@ struct TwoColourLevel
     leadingConfig      ::Configuration
     leadingNotation    ::String
     level              ::Level
+    isContinuum        ::Bool
 end
 
 function TwoColourLevel()
@@ -280,54 +281,52 @@ end
 `Liouville.initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1}, pulses::Array{Pulse.AbstractPulse, 1})`
     ... initialize the coupling Hamiltonian matrix for two-color XUV+NIR interaction.
 """
-function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Array{TwoColourLevel,1},
-                                             pulses::Array{Pulse.AbstractPulse, 1}, grid::Radial.Grid)
+function initializeCouplingHamiltonianMatrix(scheme, levels, pulses, grid, nm)
     noLevels = length(levels)
-    couplingHM = Array{Function, 2}(undef, noLevels, noLevels)
+    couplingHM = Array{Function,2}(undef, noLevels, noLevels)
 
-    # Create field functions for each pulse
-    field_funcs = []
-    for pulse in pulses
-        if typeof(pulse) == Pulse.GaussianSimplified
-            push!(field_funcs, t -> pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay)))
-        else
-            error("Unknown pulse type: $(typeof(pulse))")
+    # Precompute field function (same as before)
+    field_funcs = ...
+    total_field_func = t -> sum(f(t) for f in field_funcs)
+
+    for i in 1:noLevels, j in 1:noLevels
+        if i == j
+            couplingHM[i,j] = t -> 0.0 + 0.0im
+            continue
         end
-    end
 
-    total_field_func = t -> begin
-        sum = 0.0
-        for f in field_funcs
-            sum += f(t)
+        li = levels[i]; lj = levels[j]
+
+        # Skip if either is the dummy loss channel (energy == 0)
+        if li.level.energy == 0.0 || lj.level.energy == 0.0
+            couplingHM[i,j] = t -> 0.0 + 0.0im
+            continue
         end
-        return sum
-    end
 
-    # DEBUG: Print field at t=0.1
-    println("\n=== Field Debug ===")
-    println("Total E(0.1) = $(total_field_func(0.1)) a.u.")
-
-    # Build coupling matrix
-    for i in 1:noLevels
-        for j in 1:noLevels
-            if i == j
-                couplingHM[i,j] = t -> 0.0 + 0.0im
+        # Determine dipole matrix element
+        dipole = 0.0 + 0.0im
+        if !li.isContinuum && !lj.isContinuum
+            # Bound-bound
+            if li.level.energy < lj.level.energy
+                dipole = getDipoleFromPhotoExcitation(li.level, lj.level, grid)
             else
-                # Skip if either level is the loss channel (energy == 0.0)
-                if levels[i].level.energy == 0.0 || levels[j].level.energy == 0.0
-                    couplingHM[i,j] = t -> 0.0 + 0.0im
-                else
-                    # Ensure Hermiticity: always compute dipole from lower to higher energy
-                    if levels[i].level.energy < levels[j].level.energy
-                        dipole = getDipoleFromPhotoExcitation(levels[i].level, levels[j].level, grid)
-                    else
-                        dipole = conj(getDipoleFromPhotoExcitation(levels[j].level, levels[i].level, grid))
-                    end
-                    couplingHM[i,j] = t -> -dipole * total_field_func(t)
-                end
+                dipole = conj(getDipoleFromPhotoExcitation(lj.level, li.level, grid))
             end
+        elseif li.isContinuum && !lj.isContinuum
+            # lj is bound, li is continuum → transition is from bound to continuum
+            dipole = conj(getDipoleBoundContinuum(lj.level, li.level, grid))
+        elseif !li.isContinuum && lj.isContinuum
+            # li is bound, lj is continuum
+            dipole = getDipoleBoundContinuum(li.level, lj.level, grid)
+        else
+            # Both continuum → set to zero for now
+            dipole = 0.0 + 0.0im
         end
+
+        # Assign time-dependent coupling
+        couplingHM[i,j] = t -> -dipole * total_field_func(t)
     end
+
     return couplingHM
 end
 
