@@ -1,8 +1,7 @@
 # module-Liouville-inc-TwoColour.jl
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission, ..PhotoIonization, ..Continuum, ..Nuclear
-using DifferentialEquations
-# Call this in getDipoleFromPhotoExcitation
+
 
 # Define missing envelope function
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
@@ -406,37 +405,11 @@ function computeInteractionMatrix(scheme::TwoColourScheme, levels::Array{TwoColo
     return couplingHM
 end
 
-
-# Unnormalized envelope for intensity scaling (peak = 1)
-function nir_envelope(t::Float64, pulse::Pulse.GaussianSimplified)
-    sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
-    wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
-    return exp(-wa)
-end
-
-# Time‑dependent decay matrix
-function Gamma_matrix(t, gamma_peak, nir_pulse)
-    env = nir_envelope(t, nir_pulse)
-    Γ = zeros(ComplexF64, length(gamma_peak), length(gamma_peak))
-    for i in 1:length(gamma_peak)
-        Γ[i,i] = gamma_peak[i] * env^2
-    end
-    return Γ
-end
-
-# Liouville equation right‑hand side
-function liouville_rhs!(dρ_vec, ρ_vec, p, t)
-    H_func, gamma_peak, nir_pulse = p
-    n = length(gamma_peak)
-    ρ = reshape(ρ_vec, n, n)
-    Ht = H_func(t)
-    Γt = Gamma_matrix(t, gamma_peak, nir_pulse)
-    dρ = -im * (Ht * ρ - ρ * Ht) - 0.5 * (Γt * ρ + ρ * Γt)
-    dρ_vec[:] = vec(dρ)
-end
-
-# ========== Main perform function ==========
-
+"""
+`Liouville.perform(scheme::Liouville.StimulatedTwoColour, computation::Liouville.Computation; output::Bool=true)`
+    ... to perform a Liouville time-evolution computation for a Two Colour scheme. For output=true, a dictionary
+        is returned from which the relevant results can be can easily accessed by proper keys.
+"""
 function perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)
     if output    results = Dict{String, Any}()    else    results = nothing    end
 
@@ -497,44 +470,21 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
         end
     end
 
-    # ========== TIME EVOLUTION ==========
-    println("\n  Starting time evolution...")
-
-    # Build H(t) function (defined INSIDE perform to capture atomicHM and couplingHM)
-    function H_func(t)
-        return evaluateHamiltonianMatrix(t, atomicHM, couplingHM)
-    end
-
-    # Time span
-    tmax = maximum(pulse.timeDelay + 5*pulse.fwhm for pulse in pulses)
-    tspan = (0.0, tmax)
-
-    # Pack parameters for ODE
-    p = (H_func, gamma_peak, nir_pulse)
-
-    # Solve
-    prob = ODEProblem(liouville_rhs!, vec(densityM), tspan, p)
-    sol = solve(prob, Tsit5(), reltol=1e-8, abstol=1e-10)
-
-    # Store final density matrix
-    results["final_density"] = reshape(sol.u[end], size(densityM))
-    results["time_solution"] = sol
-
-    println("  Time evolution complete.")
-
+    # Store results (no ODE solving here)
     if output
         results["levels"] = levels
         results["initial_density"] = densityM
         results["pulses"] = computation.pulses
         results["atomic_hamiltonian"] = atomicHM
         results["coupling_hamiltonian"] = couplingHM
+        results["gamma_peak"] = gamma_peak
+        results["nir_pulse"] = nir_pulse
     end
 
-    println("\n> Two-Color computation complete ...")
+    println("\n> Two-Color computation setup complete ...")
 
     return results
 end
-
 
 """
 `Liouville.displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
