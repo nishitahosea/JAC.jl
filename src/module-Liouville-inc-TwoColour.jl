@@ -589,24 +589,22 @@ function testField()
 end
 
 function get_total_ionization_rate(level::Level, omega::Float64, nm::Nuclear.Model, grid::Radial.Grid)
-    # Create a dummy continuum level with appropriate symmetry (just for the API)
-    # We only need the cross section, so we can use a dummy final level.
-    # The final level's energy and J/parity are not used in the cross section calculation
-    # because PhotoIonization.determineLines only cares about selection rules.
-
-    # Create a dummy final level with opposite parity and J such that E1 is allowed
-    # For a given initial level, the final level must have opposite parity and J differing by 0 or ±1 (but not 0→0)
     Ji = level.J
     parity_i = level.parity
-    # Choose a final J that satisfies ΔJ = 0, ±1 (but not 0→0)
-    if Ji == AngularJ64(0)
-        Jf = AngularJ64(1)
-    elseif Ji == AngularJ64(1//2)
-        Jf = AngularJ64(1//2)  # ΔJ=0 works
+
+    # Convert Ji to Float64 for arithmetic
+    Ji_float = Float64(Ji)
+
+    # Choose final J such that ΔJ = 0, ±1 (but not 0→0)
+    if Ji_float == 0.0
+        Jf = AngularJ64(1, 1)   # J = 1
+    elseif Ji_float == 0.5
+        Jf = AngularJ64(1, 2)   # J = 1/2 (ΔJ=0)
     else
-        Jf = Ji + AngularJ64(1)  # ΔJ=+1
+        Jf = AngularJ64(Int(2*Ji_float + 2), 2)   # J = Ji + 1
     end
 
+    # Flip parity correctly
     if parity_i == Basics.plus
         parity_f = Basics.minus
     else
@@ -630,7 +628,5 @@ function get_total_ionization_rate(level::Level, omega::Float64, nm::Nuclear.Mod
     line = lines[1]
     computed_line = PhotoIonization.computeAmplitudesProperties(line, nm, grid, 100, settings, printout=false)
 
-    # Cross section in atomic units (a0^2)
-    cs_a0 = computed_line.crossSection.Coulomb
-    return cs_a0
+    return computed_line.crossSection.Coulomb
 end
