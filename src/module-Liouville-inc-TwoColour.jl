@@ -450,6 +450,31 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
         # ====================================================
     end
 
+    # Extract NIR pulse from converted pulses (not scheme.pulses)
+    nir_pulse = nothing
+    for pulse in pulses  # ← FIX 2
+        if pulse.omega < 0.1
+            nir_pulse = pulse
+            break
+        end
+    end
+
+    if nir_pulse === nothing
+        error("No NIR pulse found in pulses")
+    end
+
+    nir_omega = nir_pulse.omega
+    nir_fwhm = nir_pulse.fwhm
+    nir_timeDelay = nir_pulse.timeDelay
+    nir_A0 = nir_pulse.A0
+
+    gamma_peak = zeros(Float64, noLevels)
+    for i in 1:noLevels
+        if levels[i].level.energy < 0.0
+            gamma_peak[i] = get_total_ionization_rate(levels[i].level, nir_omega, computation.nuclearModel, computation.grid)
+        end
+    end
+
     println("\n  Two-Color time evolution not yet implemented.")
 
     if output
@@ -561,30 +586,34 @@ function testField()
     end
 end
 
-function get_total_ionization_rate(boundLevel::Level, nir_omega::Float64, nm::Nuclear.Model, grid::Radial.Grid)
-    # Create a dummy final multiplet with a placeholder level (any level with the same symmetry as the continuum)
-    # This is a bit hacky but works because PhotoIonization.determineLines only needs the symmetry.
-    dummy_level = Level(boundLevel.J, AngularM64(0), -boundLevel.parity, 0, boundLevel.energy + nir_omega, 0.0, false, Basis(), Float64[])
+function get_total_ionization_rate(level::Level, omega::Float64, nm::Nuclear.Model, grid::Radial.Grid)
+    # Create a dummy continuum level with appropriate symmetry (just for the API)
+    # We only need the cross section, so we can use a dummy final level.
+    # The final level's energy and J/parity are not used in the cross section calculation
+    # because PhotoIonization.determineLines only cares about selection rules.
+
+    # Create a dummy final level with opposite parity and J such that E1 is allowed
+    # For a given initial level, the final level must have opposite parity and J differing by 0 or ±1 (but not 0→0)
+    Ji = level.J
+    parity_i = level.parity
+    # Choose a final J that satisfies ΔJ = 0, ±1 (but not 0→0)
+    if Ji == AngularJ64(0)
+        Jf = AngularJ64(1)
+    elseif Ji == AngularJ64(1//2)
+        Jf = AngularJ64(1//2)  # ΔJ=0 works
+    else
+        Jf = Ji + AngularJ64(1)  # ΔJ=+1
+    end
+    parity_f = -parity_i  # opposite parity
+
+    dummy_level = Level(Jf, AngularM64(0), parity_f, 0, 0.0, 0.0, false, Basis(), Float64[])
     dummy_multiplet = Multiplet("dummy", [dummy_level])
-    initial_multiplet = Multiplet("initial", [boundLevel])
+    initial_multiplet = Multiplet("initial", [level])
 
     settings = PhotoIonization.Settings(
-        multipoles = [E1],
-        gauges = [UseCoulomb],
-        photonEnergies = [nir_omega],
-        electronEnergies = Float64[],
-        thetas = Float64[],
-        phis = Float64[],
-        calcAnisotropy = false,
-        calcPartialCs = false,
-        calcTimeDelay = false,
-        calcNonE1AngleDifferentialCS = false,
-        calcTensors = false,
-        printBefore = false,
-        lineSelection = LineSelection(),
-        stokes = Basics.ExpStokes(),
-        freeElectronShift = 0.0,
-        lValues = [0,1,2,3,4,5]
+        [E1], [UseCoulomb], [omega], Float64[], Float64[], Float64[],
+        false, false, false, false, false, false, LineSelection(),
+        Basics.ExpStokes(), 0.0, [0,1,2,3,4,5]
     )
 
     lines = PhotoIonization.determineLines(dummy_multiplet, initial_multiplet, settings)
@@ -594,14 +623,7 @@ function get_total_ionization_rate(boundLevel::Level, nir_omega::Float64, nm::Nu
     line = lines[1]
     computed_line = PhotoIonization.computeAmplitudesProperties(line, nm, grid, 100, settings, printout=false)
 
-    # The cross section is in atomic units (a0^2)
-    cs = computed_line.crossSection.Coulomb  # in a0^2
-    # Convert to rate: Γ = σ * (I / ℏω) in atomic units
-    # Intensity I in a.u. is |E|^2/(8πα) – but we need the peak intensity from the NIR pulse
-    # For now, we can compute the rate at peak intensity and scale by envelope^2 later.
-    # The atomic unit of intensity is I0 = 3.51e16 W/cm²
-    # For a given intensity I in W/cm², I_a.u. = I / I0
-    # Then Γ = σ * (I_a.u. / ω) in a.u. (since ℏ=1)
-    # We'll return the cross section in a0^2; the caller will multiply by the flux.
-    return cs  # in atomic units of area (a0^2)
+    # Cross section in atomic units (a0^2)
+    cs_a0 = computed_line.crossSection.Coulomb
+    return cs_a0
 end
