@@ -561,3 +561,47 @@ function testField()
     end
 end
 
+function get_total_ionization_rate(boundLevel::Level, nir_omega::Float64, nm::Nuclear.Model, grid::Radial.Grid)
+    # Create a dummy final multiplet with a placeholder level (any level with the same symmetry as the continuum)
+    # This is a bit hacky but works because PhotoIonization.determineLines only needs the symmetry.
+    dummy_level = Level(boundLevel.J, AngularM64(0), -boundLevel.parity, 0, boundLevel.energy + nir_omega, 0.0, false, Basis(), Float64[])
+    dummy_multiplet = Multiplet("dummy", [dummy_level])
+    initial_multiplet = Multiplet("initial", [boundLevel])
+
+    settings = PhotoIonization.Settings(
+        multipoles = [E1],
+        gauges = [UseCoulomb],
+        photonEnergies = [nir_omega],
+        electronEnergies = Float64[],
+        thetas = Float64[],
+        phis = Float64[],
+        calcAnisotropy = false,
+        calcPartialCs = false,
+        calcTimeDelay = false,
+        calcNonE1AngleDifferentialCS = false,
+        calcTensors = false,
+        printBefore = false,
+        lineSelection = LineSelection(),
+        stokes = Basics.ExpStokes(),
+        freeElectronShift = 0.0,
+        lValues = [0,1,2,3,4,5]
+    )
+
+    lines = PhotoIonization.determineLines(dummy_multiplet, initial_multiplet, settings)
+    if isempty(lines)
+        return 0.0
+    end
+    line = lines[1]
+    computed_line = PhotoIonization.computeAmplitudesProperties(line, nm, grid, 100, settings, printout=false)
+
+    # The cross section is in atomic units (a0^2)
+    cs = computed_line.crossSection.Coulomb  # in a0^2
+    # Convert to rate: Γ = σ * (I / ℏω) in atomic units
+    # Intensity I in a.u. is |E|^2/(8πα) – but we need the peak intensity from the NIR pulse
+    # For now, we can compute the rate at peak intensity and scale by envelope^2 later.
+    # The atomic unit of intensity is I0 = 3.51e16 W/cm²
+    # For a given intensity I in W/cm², I_a.u. = I / I0
+    # Then Γ = σ * (I_a.u. / ω) in a.u. (since ℏ=1)
+    # We'll return the cross section in a0^2; the caller will multiply by the flux.
+    return cs  # in atomic units of area (a0^2)
+end
