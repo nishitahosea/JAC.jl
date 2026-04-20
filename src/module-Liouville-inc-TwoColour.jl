@@ -606,7 +606,12 @@ function get_total_ionization_rate(level::Level, omega::Float64, nm::Nuclear.Mod
     else
         Jf = Ji + AngularJ64(1)  # ΔJ=+1
     end
-    parity_f = -parity_i  # opposite parity
+
+    if parity_i == Basics.plus
+        parity_f = Basics.minus
+    else
+        parity_f = Basics.plus
+    end
 
     dummy_level = Level(Jf, AngularM64(0), parity_f, 0, 0.0, 0.0, false, Basis(), Float64[])
     dummy_multiplet = Multiplet("dummy", [dummy_level])
