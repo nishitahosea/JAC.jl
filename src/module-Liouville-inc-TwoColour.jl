@@ -436,6 +436,7 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
 
     # Initialize levels and density matrix
     levels = initializeLevels(scheme, multiplet)
+    noLevels = length(levels)
     densityM = initializeDensityMatrix(levels)
 
     # ========== NEW CODE: Initialize Hamiltonians ==========
@@ -467,6 +468,7 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
     nir_fwhm = nir_pulse.fwhm
     nir_timeDelay = nir_pulse.timeDelay
     nir_A0 = nir_pulse.A0
+
 
     gamma_peak = zeros(Float64, noLevels)
     for i in 1:noLevels
