@@ -7,7 +7,7 @@ using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission, ..Photo
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
     sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
     wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
-    return exp(-wa) / (sigma * sqrt(2pi))
+    return exp(-wa)
 end
 
 function gaussianEnvelope(t::Float64, sigma::Float64)
