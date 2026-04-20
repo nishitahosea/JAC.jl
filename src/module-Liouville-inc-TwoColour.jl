@@ -1,7 +1,7 @@
 # module-Liouville-inc-TwoColour.jl
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission, ..PhotoIonization, ..Continuum, ..Nuclear
-
+using DifferentialEquations
 # Call this in getDipoleFromPhotoExcitation
 
 # Define missing envelope function
@@ -407,10 +407,36 @@ function computeInteractionMatrix(scheme::TwoColourScheme, levels::Array{TwoColo
 end
 
 
-"""
-`Liouville.perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)`
-    ... perform two-color XUV+NIR Liouville computation.
-"""
+# Unnormalized envelope for intensity scaling (peak = 1)
+function nir_envelope(t::Float64, pulse::Pulse.GaussianSimplified)
+    sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
+    wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
+    return exp(-wa)
+end
+
+# Time‑dependent decay matrix
+function Gamma_matrix(t, gamma_peak, nir_pulse)
+    env = nir_envelope(t, nir_pulse)
+    Γ = zeros(ComplexF64, length(gamma_peak), length(gamma_peak))
+    for i in 1:length(gamma_peak)
+        Γ[i,i] = gamma_peak[i] * env^2
+    end
+    return Γ
+end
+
+# Liouville equation right‑hand side
+function liouville_rhs!(dρ_vec, ρ_vec, p, t)
+    H_func, gamma_peak, nir_pulse = p
+    n = length(gamma_peak)
+    ρ = reshape(ρ_vec, n, n)
+    Ht = H_func(t)
+    Γt = Gamma_matrix(t, gamma_peak, nir_pulse)
+    dρ = -im * (Ht * ρ - ρ * Ht) - 0.5 * (Γt * ρ + ρ * Γt)
+    dρ_vec[:] = vec(dρ)
+end
+
+# ========== Main perform function ==========
+
 function perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)
     if output    results = Dict{String, Any}()    else    results = nothing    end
 
@@ -439,21 +465,18 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
     noLevels = length(levels)
     densityM = initializeDensityMatrix(levels)
 
-    # ========== NEW CODE: Initialize Hamiltonians ==========
+    # Initialize Hamiltonians
     atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
-    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, computation.grid, computation.nuclearModel) # Pass the 'pulses' array here
-    # ======================================================
+    couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, computation.grid, computation.nuclearModel)
 
     if computation.settings.printBefore
         displayDensityMatrix(stdout, levels, densityM)
-        # ========== NEW CODE: Display Hamiltonians ==========
         displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)
-        # ====================================================
     end
 
-    # Extract NIR pulse from converted pulses (not scheme.pulses)
+    # Extract NIR pulse
     nir_pulse = nothing
-    for pulse in pulses  # ← FIX 2
+    for pulse in pulses
         if pulse.omega < 0.1
             nir_pulse = pulse
             break
@@ -465,11 +488,8 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
     end
 
     nir_omega = nir_pulse.omega
-    nir_fwhm = nir_pulse.fwhm
-    nir_timeDelay = nir_pulse.timeDelay
-    nir_A0 = nir_pulse.A0
 
-
+    # Pre‑compute peak ionization rates
     gamma_peak = zeros(Float64, noLevels)
     for i in 1:noLevels
         if levels[i].level.energy < 0.0
@@ -477,19 +497,40 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
         end
     end
 
-    println("\n  Two-Color time evolution not yet implemented.")
+    # ========== TIME EVOLUTION ==========
+    println("\n  Starting time evolution...")
+
+    # Build H(t) function (defined INSIDE perform to capture atomicHM and couplingHM)
+    function H_func(t)
+        return evaluateHamiltonianMatrix(t, atomicHM, couplingHM)
+    end
+
+    # Time span
+    tmax = maximum(pulse.timeDelay + 5*pulse.fwhm for pulse in pulses)
+    tspan = (0.0, tmax)
+
+    # Pack parameters for ODE
+    p = (H_func, gamma_peak, nir_pulse)
+
+    # Solve
+    prob = ODEProblem(liouville_rhs!, vec(densityM), tspan, p)
+    sol = solve(prob, Tsit5(), reltol=1e-8, abstol=1e-10)
+
+    # Store final density matrix
+    results["final_density"] = reshape(sol.u[end], size(densityM))
+    results["time_solution"] = sol
+
+    println("  Time evolution complete.")
 
     if output
         results["levels"] = levels
         results["initial_density"] = densityM
         results["pulses"] = computation.pulses
-        # ========== NEW CODE: Add Hamiltonians to results ==========
         results["atomic_hamiltonian"] = atomicHM
         results["coupling_hamiltonian"] = couplingHM
-        # ============================================================
     end
 
-    println("\n> Two-Color computation setup complete ...")
+    println("\n> Two-Color computation complete ...")
 
     return results
 end
@@ -587,6 +628,16 @@ function testField()
         println("t = $t: E_xuv = $E_xuv, E_nir = $E_nir, total = $(E_xuv + E_nir)")
     end
 end
+
+function evaluateHamiltonianMatrix(t, atomicHM, couplingHM)
+    n = size(atomicHM, 1)
+    H = copy(atomicHM)
+    for i in 1:n, j in 1:n
+        H[i,j] += couplingHM[i,j](t)
+    end
+    return H
+end
+
 
 function get_total_ionization_rate(level::Level, omega::Float64, nm::Nuclear.Model, grid::Radial.Grid)
     Ji = level.J
