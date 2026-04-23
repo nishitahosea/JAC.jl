@@ -10,11 +10,11 @@ function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
 end
 
 
-function carrier( pulse::Pulse.GaussianSimplified, t::float )
+function carrier( pulse::Pulse.GaussianSimplified, t::Float64 )
     return cos( pulse.omega * t )
 end
 
-function pulse( pulse::Pulse.GaussianSimplified, t::float )
+function pulse( pulse::Pulse.GaussianSimplified, t::Float64 )
     return envelope( pulse, t ) * carrier( pulse * t )
 end
 
