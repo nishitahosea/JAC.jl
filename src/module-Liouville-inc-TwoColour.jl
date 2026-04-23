@@ -2,18 +2,22 @@
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission, ..PhotoIonization, ..Continuum, ..Nuclear
 
-
-# Define missing envelope function
+# Define envelope function
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
     sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
     wa = (t - pulse.timeDelay)^2 / (2 * sigma^2)
     return exp(-wa)
 end
 
-function gaussianEnvelope(t::Float64, sigma::Float64)
-    wa = t^2 / (2*sigma)^2
-    return exp(-wa) / (sigma * sqrt(2pi))
+
+function carrier( pulse::Pulse.GaussianSimplified, t::float )
+    return cos( pulse.omega * t )
 end
+
+function pulse( pulse::Pulse.GaussianSimplified, t::float )
+    return envelope( pulse, t ) * carrier( pulse * t )
+end
+
 
 """
 `struct Liouville.TwoColourLevel`
