@@ -218,8 +218,6 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
 end
 
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    dipole = getDipoleFromPhotoExcitation(li.level, lj.level, grid)
-    println("DEBUG: Dipole for ($i,$j) = $dipole a.u.")
     return getTransitionAmplitude(level_i, level_j, grid, E1, UseCoulomb)
 end
 
