@@ -173,8 +173,14 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
 
     omega = abs(level_j.energy - level_i.energy)
     if omega < 1e-6
+        println("DEBUG: omega too small")
         return 0.0 + 0.0im
     end
+
+    println("DEBUG: Computing transition from level $(initial_level.index) to $(final_level.index)")
+    println("DEBUG: initial_level.J = $(initial_level.J), parity = $(initial_level.parity)")
+    println("DEBUG: final_level.J = $(final_level.J), parity = $(final_level.parity)")
+    println("DEBUG: omega = $omega a.u.")
 
     # Settings with the requested multipole and gauge
     settings = PhotoExcitation.Settings(
@@ -184,8 +190,13 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
 
     # Determine allowed channels
     channels = PhotoExcitation.determineChannels(final_level, initial_level, settings)
+    println("DEBUG: Number of channels found = $(length(channels))")
     if isempty(channels)
         return 0.0 + 0.0im
+    end
+
+    for ch in channels
+        println("DEBUG: Channel: multipole=$(ch.multipole), gauge=$(ch.gauge)")
     end
 
     # Create and compute the line
@@ -194,17 +205,21 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
                                 TensorComp[], true, channels)
     computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
 
-    # Extract the amplitude for the requested multipole and gauge
+    # Extract the amplitude
     for channel in computed_line.channels
         if channel.multipole == multipole && channel.gauge == gauge
+            println("DEBUG: Found amplitude = $(channel.amplitude)")
             return channel.amplitude
         end
     end
 
+    println("DEBUG: No matching channel found")
     return 0.0 + 0.0im
 end
 
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
+    dipole = getDipoleFromPhotoExcitation(li.level, lj.level, grid)
+    println("DEBUG: Dipole for ($i,$j) = $dipole a.u.")
     return getTransitionAmplitude(level_i, level_j, grid, E1, UseCoulomb)
 end
 
