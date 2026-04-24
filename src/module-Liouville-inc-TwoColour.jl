@@ -155,13 +155,13 @@ end
 
 
 """
-    getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid, multipole::EmMultipole=E1, gauge::EmGauge=UseCoulomb)
+    getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid, multipole::EmMultipole=E1, gauge::EmGauge=Basics.Coulomb)
 
 Returns the complex transition amplitude (reduced matrix element) for a bound‑bound
 transition between level_i and level_j for the specified multipole and gauge.
 """
 function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid,
-                                multipole::EmMultipole=E1, gauge::EmGauge=UseCoulomb)
+                                multipole::EmMultipole=E1, gauge::EmGauge=Basics.Coulomb)
     # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
         final_level = level_j
@@ -204,13 +204,8 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
     return 0.0 + 0.0im
 end
 
-
-"""
-`Liouville.getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)`
-    ... computes electric dipole matrix element using JAC's PhotoExcitation module.
-"""
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    return getTransitionAmplitude(level_i, level_j, grid, E1, UseCoulomb)
+    return getTransitionAmplitude(level_i, level_j, grid, E1, Basics.Coulomb)
 end
 
 
