@@ -205,10 +205,31 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
                                 TensorComp[], true, channels)
     computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
 
-    # Extract the amplitude
-    for channel in computed_line.channels
+    # Debug: Print all computed channels
+    println("DEBUG: computed_line has $(length(computed_line.channels)) channels")
+    for (idx, ch) in enumerate(computed_line.channels)
+        println("DEBUG:   computed_line channel $idx: multipole=$(ch.multipole), gauge=$(ch.gauge), amplitude=$(ch.amplitude)")
+    end
+
+    # Extract the amplitude for the requested multipole and gauge
+    println("DEBUG: Looking for multipole = $multipole, gauge = $gauge")
+    println("DEBUG: gauge type = $(typeof(gauge))")
+
+    for (idx, channel) in enumerate(computed_line.channels)
+        println("DEBUG: Channel $idx: multipole = $(channel.multipole), gauge = $(channel.gauge)")
+        println("DEBUG:   channel.gauge type = $(typeof(channel.gauge))")
+        println("DEBUG:   multipole == $multipole? $(channel.multipole == multipole)")
+        println("DEBUG:   gauge == $gauge? $(channel.gauge == gauge)")
         if channel.multipole == multipole && channel.gauge == gauge
             println("DEBUG: Found amplitude = $(channel.amplitude)")
+            return channel.amplitude
+        end
+    end
+
+    # If not found by direct equality, try string comparison
+    for channel in computed_line.channels
+        if channel.multipole == multipole && string(channel.gauge) == "Coulomb"
+            println("DEBUG: Found amplitude by string match = $(channel.amplitude)")
             return channel.amplitude
         end
     end
