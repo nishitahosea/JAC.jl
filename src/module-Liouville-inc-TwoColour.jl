@@ -326,11 +326,7 @@ function computeInteractionMatrix(scheme::TwoColourScheme, levels::Array{TwoColo
     return couplingHM
 end
 
-"""
-`Liouville.perform(scheme::Liouville.StimulatedTwoColour, computation::Liouville.Computation; output::Bool=true)`
-    ... to perform a Liouville time-evolution computation for a Two Colour scheme. For output=true, a dictionary
-        is returned from which the relevant results can be can easily accessed by proper keys.
-"""
+
 """
 `Liouville.perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)`
     ... to perform a Liouville time-evolution computation with built-in RK4 solver.
