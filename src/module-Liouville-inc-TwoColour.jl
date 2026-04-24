@@ -161,7 +161,7 @@ Returns the complex transition amplitude (reduced matrix element) for a bound‑
 transition between level_i and level_j for the specified multipole and gauge.
 """
 function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid,
-                                multipole=E1, gauge=UseCoulomb)
+                                multipole=E1, gauge=Basics.Coulomb)
     # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
         final_level = level_j
