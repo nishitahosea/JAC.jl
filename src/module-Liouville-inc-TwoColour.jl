@@ -161,7 +161,7 @@ Returns the complex transition amplitude (reduced matrix element) for a bound‑
 transition. Uses oscillator strength for magnitude and raw amplitude for phase.
 """
 function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid,
-                                multipole=E1, gauge=Basics.Coulomb)
+                                multipole=E1, gauge=UseCoulomb)
     # Determine final (higher energy) and initial (lower energy)
     if level_j.energy > level_i.energy
         final_level = level_j
@@ -217,7 +217,7 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
 end
 
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    return getTransitionAmplitude(level_i, level_j, grid, E1, Basics.Coulomb)
+    return getTransitionAmplitude(level_i, level_j, grid, E1, UseCoulomb)
 end
 
 
