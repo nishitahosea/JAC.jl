@@ -155,10 +155,10 @@ end
 
 
 """
-    getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid, multipole::EmMultipole=E1, gauge::EmGauge=Basics.Coulomb)
+    getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid, multipole, gauge)
 
 Returns the complex transition amplitude (reduced matrix element) for a bound‑bound
-transition between level_i and level_j for the specified multipole and gauge.
+transition. Uses oscillator strength for magnitude and raw amplitude for phase.
 """
 function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Grid,
                                 multipole=E1, gauge=Basics.Coulomb)
@@ -194,16 +194,26 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
                                 TensorComp[], true, channels)
     computed_line = PhotoExcitation.computeAmplitudesProperties(line, grid, settings, printout=false)
 
-    # Extract the amplitude - use the exact gauge from the computed channel
+    # Extract oscillator strength for magnitude (gauge-invariant)
+    f = computed_line.oscStrength.Coulomb
+    if f <= 0.0
+        return 0.0 + 0.0im
+    end
+    d_mag = sqrt(3 * f / (2 * omega))
+
+    # Extract phase from raw amplitude
+    phase = 1.0 + 0.0im
     for channel in computed_line.channels
-        if channel.multipole == multipole && string(channel.gauge) == "Coulomb"
-            # The amplitude from PhotoExcitation is the reduced matrix element.
-            # For E1 transitions, this is the dipole matrix element in a.u.
-            return channel.amplitude
+        if channel.multipole == multipole && channel.gauge == gauge
+            amp = channel.amplitude
+            if abs(amp) > 1e-12
+                phase = amp / abs(amp)
+            end
+            break
         end
     end
 
-    return 0.0 + 0.0im
+    return d_mag * phase
 end
 
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
