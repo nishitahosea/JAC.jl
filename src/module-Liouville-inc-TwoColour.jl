@@ -238,21 +238,10 @@ function getTransitionAmplitude(level_i::Level, level_j::Level, grid::Radial.Gri
     return 0.0 + 0.0im
 end
 
+
 function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-    # Temporary theoretical value for He⁺ 1s→2p
-    Ji = Float64(level_i.J)
-    Jf = Float64(level_j.J)
-    parity_change = (level_i.parity != level_j.parity)
-
-    if Ji == 0.5 && level_i.parity == plus && Jf in [0.5, 1.5] && level_j.parity == minus
-        return 0.3725 + 0.0im
-    end
-    return 0.0 + 0.0im
+    return getTransitionAmplitude(level_i, level_j, grid, E1, UseCoulomb)
 end
-
-# function getDipoleFromPhotoExcitation(level_i::Level, level_j::Level, grid::Radial.Grid)
-#     return getTransitionAmplitude(level_i, level_j, grid, E1, UseCoulomb)
-# end
 
 
 function getDipoleBoundContinuum(boundLevel::Level, contLevel::Level, grid::Radial.Grid, nm::Nuclear.Model)
