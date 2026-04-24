@@ -314,27 +314,20 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
     noLevels = length(levels)
     couplingHM = Array{Function,2}(undef, noLevels, noLevels)
 
-    # Create field functions for each pulse
+    # Create field functions for each pulse (sum of all fields)
     field_funcs = []
     for pulse in pulses
         if typeof(pulse) == Pulse.GaussianSimplified
+            # E(t) = A0 * envelope(t) * cos(ω(t - t_d))
             push!(field_funcs, t -> pulse.A0 * envelope(pulse, t) * cos(pulse.omega * (t - pulse.timeDelay)))
         else
             error("Unknown pulse type: $(typeof(pulse))")
         end
     end
 
-    total_field_func = t -> begin
-        s = 0.0
-        for f in field_funcs
-            s += f(t)
-        end
-        return s
-    end
+    total_field_func = t -> sum(f(t) for f in field_funcs)
 
-    # Precompute dipole elements for bound-bound pairs (optional caching)
-    # We compute them on the fly for simplicity.
-
+    # Build coupling matrix – only bound‑bound couplings
     for i in 1:noLevels, j in 1:noLevels
         if i == j
             couplingHM[i,j] = t -> 0.0 + 0.0im
@@ -344,38 +337,21 @@ function initializeCouplingHamiltonianMatrix(scheme::TwoColourScheme, levels::Ar
         li = levels[i]
         lj = levels[j]
 
-        # Skip if either level is the dummy loss channel (energy == 0.0)
+        # Skip the loss channel (energy == 0.0)
         if li.level.energy == 0.0 || lj.level.energy == 0.0
             couplingHM[i,j] = t -> 0.0 + 0.0im
             continue
         end
 
-        dipole = 0.0 + 0.0im
-
-        # Determine whether each level is bound or continuum
-        # We assume li.isContinuum and lj.isContinuum are defined (as Booleans) in TwoColourLevel.
-        # If not yet added, you must add that field to the struct.
-        bound_i = !li.isContinuum
-        bound_j = !lj.isContinuum
-
-        if bound_i && bound_j
-            # Bound-bound coupling (excitation)
-            if li.level.energy < lj.level.energy
-                dipole = getDipoleFromPhotoExcitation(li.level, lj.level, grid)
-            else
-                dipole = conj(getDipoleFromPhotoExcitation(lj.level, li.level, grid))
-            end
-        elseif bound_i && !bound_j
-            # i is bound, j is continuum → ionization from i to j
-            dipole = getDipoleBoundContinuum(li.level, lj.level, grid, nm)
-        elseif !bound_i && bound_j
-            # i is continuum, j is bound → recombination (conjugate of ionization)
-            dipole = conj(getDipoleBoundContinuum(lj.level, li.level, grid, nm))
+        # Only bound‑bound couplings
+        # Ensure Hermiticity: always compute dipole from lower to higher energy
+        if li.level.energy < lj.level.energy
+            dipole = getDipoleFromPhotoExcitation(li.level, lj.level, grid)
         else
-            # Both continuum → free-free transitions (neglected for now)
-            dipole = 0.0 + 0.0im
+            dipole = conj(getDipoleFromPhotoExcitation(lj.level, li.level, grid))
         end
 
+        # V_ij = -d_ij * E_total(t)
         couplingHM[i,j] = t -> -dipole * total_field_func(t)
     end
 
