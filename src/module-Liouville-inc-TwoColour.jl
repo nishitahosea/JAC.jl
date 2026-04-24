@@ -1,6 +1,7 @@
 # module-Liouville-inc-TwoColour.jl
 
 using ..Basics, ..Defaults, ..Pulse, ..PhotoExcitation, ..PhotoEmission, ..PhotoIonization, ..Continuum, ..Nuclear
+using Dates
 
 # Define envelope function
 function envelope(pulse::Pulse.GaussianSimplified, t::Float64)
@@ -330,6 +331,10 @@ end
     ... to perform a Liouville time-evolution computation for a Two Colour scheme. For output=true, a dictionary
         is returned from which the relevant results can be can easily accessed by proper keys.
 """
+"""
+`Liouville.perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)`
+    ... to perform a Liouville time-evolution computation with built-in RK4 solver.
+"""
 function perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)
     if output    results = Dict{String, Any}()    else    results = nothing    end
 
@@ -350,94 +355,252 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
     end
 
     # Atomic structure
+    println("Performing SCF calculations...")
     multiplet = SelfConsistent.performSCF(computation.refConfigs, computation.nuclearModel,
                                           computation.grid, computation.asfSettings)
 
     # Initialize levels and density matrix
     levels = initializeLevels(scheme, multiplet)
     noLevels = length(levels)
-    densityM = initializeDensityMatrix(levels)
+    println("Number of levels: $noLevels")
+
+    for (idx, level) in enumerate(levels)
+        println("  Level $idx: $(level.leadingNotation), energy = $(level.level.energy) a.u.")
+    end
 
     # Initialize Hamiltonians
     atomicHM = initializeAtomicHamiltonianMatrix(scheme, levels)
     couplingHM = initializeCouplingHamiltonianMatrix(scheme, levels, pulses, computation.grid, computation.nuclearModel)
 
+    # Create time-dependent Hamiltonian function
+    function H_total(t)
+        H = copy(atomicHM)
+        n = size(atomicHM, 1)
+        for i in 1:n, j in 1:n
+            H[i,j] += couplingHM[i,j](t)
+        end
+        return H
+    end
+
+    # Initial density matrix (ground state populated)
+    ρ0 = initializeDensityMatrix(levels)
+
     if computation.settings.printBefore
-        displayDensityMatrix(stdout, levels, densityM)
-        displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)
+        println("\nInitial density matrix:")
+        displayDensityMatrix(stdout, levels, ρ0)
+        println("\nHamiltonian at t=0:")
+        H0 = H_total(0.0)
+        displayHamiltonian(stdout, levels, H0)
     end
 
-    # Extract NIR pulse
-    nir_pulse = nothing
+    # Define Liouville-von Neumann equation: dρ/dt = -i[H, ρ]
+    function liouville_derivative(ρ, p, t)
+        # Compute Hamiltonian at this time
+        H = H_total(t)
+
+        # Compute commutator -i[H, ρ]
+        dρ = -im * (H * ρ - ρ * H)
+
+        return vec(dρ)
+    end
+
+    # Determine time span based on pulses
+    max_pulse_time = 0.0
     for pulse in pulses
-        if pulse.omega < 0.1
-            nir_pulse = pulse
-            break
+        sigma = pulse.fwhm / (2 * sqrt(2 * log(2)))
+        pulse_end = pulse.timeDelay + 4*sigma + 100.0
+        max_pulse_time = max(max_pulse_time, pulse_end)
+    end
+
+    t_max = max(max_pulse_time, computation.freeTime)
+    tspan = (0.0, t_max)
+
+    # Choose time step (adaptive based on Rabi frequency estimate)
+    # Estimate Rabi frequency from dipole moment
+    if noLevels >= 2 && abs(couplingHM[1,2](0.0)) > 0
+        Ω_est = 2 * abs(couplingHM[1,2](0.0))  # Rough estimate
+        dt = min(0.1, π / (10 * Ω_est))  # 10 points per Rabi period
+    else
+        dt = 0.1  # Default time step
+    end
+    dt = max(dt, 0.01)  # Don't go too small
+
+    println("\nTime evolution parameters:")
+    println("  t_max = $(t_max) a.u. ($(t_max * 2.4189e-17) s)")
+    println("  dt = $dt a.u.")
+    println("  Number of time steps = $(Int(ceil(t_max/dt)))")
+    println("  Number of levels = $noLevels")
+
+    # Solve using RK4
+    println("\nSolving Liouville equation with RK4...")
+    save_every = max(1, Int(ceil(10/dt)))  # Save ~10 points per time unit
+    times, ρ_vecs = rk4_liouville!(liouville_derivative, ρ0, tspan, dt, save_every=save_every)
+
+    println("Solution complete! Time points: $(length(times))")
+
+    # Calculate populations over time
+    populations = zeros(length(times), noLevels)
+    coherences = zeros(ComplexF64, length(times))
+
+    for (idx, t) in enumerate(times)
+        ρ_t = reshape(ρ_vecs[idx], noLevels, noLevels)
+        for i in 1:noLevels
+            populations[idx, i] = real(ρ_t[i, i])
+        end
+        # Store coherence between ground and first excited state
+        if noLevels >= 2
+            coherences[idx] = ρ_t[1, 2]
         end
     end
 
-    if nir_pulse === nothing
-        error("No NIR pulse found in pulses")
-    end
-
-    nir_omega = nir_pulse.omega
-
-    # Pre‑compute peak ionization rates
-    gamma_peak = zeros(Float64, noLevels)
+    # Print final populations
+    println("\n=== Final Populations ===")
     for i in 1:noLevels
-        if levels[i].level.energy < 0.0
-            gamma_peak[i] = get_total_ionization_rate(levels[i].level, nir_omega, computation.nuclearModel, computation.grid)
+        @printf("  %s: %.6f\n", levels[i].leadingNotation, populations[end, i])
+    end
+
+    # Check for Rabi oscillations
+    if noLevels >= 2
+        max_excited = maximum(populations[:,2])
+        min_ground = minimum(populations[:,1])
+
+        println("\n=== Rabi Oscillation Analysis ===")
+        println("  Maximum excited population: $(max_excited)")
+        println("  Minimum ground population: $(min_ground)")
+
+        if max_excited > 0.9
+            println("  ✓ Strong Rabi oscillations observed (near-complete transfer)")
+        elseif max_excited > 0.5
+            println("  ✓ Rabi oscillations observed (partial transfer)")
+        elseif max_excited > 0.1
+            println("  ⚠ Weak Rabi oscillations - try increasing pulse intensity (A0)")
+        else
+            println("  ✗ No significant oscillations - check resonance condition")
+            println("     Make sure pulse frequency matches level energy difference")
+        end
+
+        # Estimate Rabi frequency if oscillations are present
+        if max_excited > 0.1
+            # Find first few peaks
+            peaks = findlocalmaxima(populations[:,2])
+            if length(peaks) >= 2
+                t_first_peak = times[peaks[1]]
+                t_second_peak = times[peaks[2]]
+                Ω_rabi = π / (t_second_peak - t_first_peak)
+                println("  Estimated Rabi frequency: $(Ω_rabi) a.u. ($(Ω_rabi * 4.134e16) Hz)")
+                println("  Rabi period: $(2π/Ω_rabi) a.u. ($(2π/Ω_rabi * 2.4189e-17) s)")
+            end
         end
     end
 
-    # Store results (no ODE solving here)
+    # Print sample of time evolution
+    println("\n=== Sample Time Evolution (first 10 points) ===")
+    println("Time (a.u.)    | Ground      | Excited")
+    println("-" ^ 50)
+    n_samples = min(10, length(times))
+    for i in 1:n_samples
+        @printf("%10.2f     | %8.6f  | %8.6f\n",
+                times[i], populations[i,1], populations[i,2])
+    end
+    if length(times) > 10
+        println("...")
+        @printf("%10.2f     | %8.6f  | %8.6f\n",
+                times[end], populations[end,1], populations[end,2])
+    end
+
+    # Save results
     if output
         results["levels"] = levels
-        results["initial_density"] = densityM
-        results["pulses"] = computation.pulses
+        results["initial_density"] = ρ0
+        results["final_density"] = reshape(ρ_vecs[end], noLevels, noLevels)
+        results["times"] = times
+        results["populations"] = populations
+        results["coherences"] = coherences
         results["atomic_hamiltonian"] = atomicHM
-        results["coupling_hamiltonian"] = couplingHM
-        results["gamma_peak"] = gamma_peak
-        results["nir_pulse"] = nir_pulse
+        results["pulses"] = computation.pulses
+
+        # Save to CSV for easy plotting
+        filename = "liouville_results_$(Dates.format(now(), "YYYYmmDD_HHMMSS")).csv"
+        open(filename, "w") do io
+            println(io, "time,ground_population,excited_population")
+            for i in 1:length(times)
+                println(io, "$(times[i]),$(populations[i,1]),$(populations[i,2])")
+            end
+        end
+        println("\nResults saved to: $filename")
+
+        # Also save as JLD2 if available
+        try
+            jld2_filename = "liouville_results_$(Dates.format(now(), "YYYYmmDD_HHMMSS")).jld2"
+            @save jld2_filename results
+            println("Full results saved to: $jld2_filename")
+        catch
+            println("JLD2 not available, skipping binary save")
+        end
     end
 
-    println("\n> Two-Color computation setup complete ...")
-
+    println("\n> Two-Color computation complete!")
     return results
 end
 
-"""
-`Liouville.displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
-                                     couplingHM::Array{Function, 2})`
-    ... Display the Hamiltonian matrices at a sample time t=0.1.
-"""
-function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
-                                   couplingHM::Array{Function, 2})
-    noLevels = length(levels)
-    t = 0.0  # XUV peaks at t=0
-
-    totalHamiltonian = [t -> couplingHM[i,j](t) + atomicHM[i,j] for i in 1:noLevels, j in 1:noLevels]
-    totalH = [f(t) for f in totalHamiltonian]
-
-    println(stream, " ")
-    println(stream, "  Two-Color Hamiltonian matrix (atomic + coupling), evaluated for t=$t:")
-    println(stream, " ")
-    for (idx, level) in enumerate(levels)
-        sa = "       " * string(idx) * ")  "
-        sa = sa * string(level.leadingConfig) * "   "
-        sa = sa * string(level.leadingNotation) * "                          "
-        if length(sa) >= 70
-            sa = sa[1:70]
+function findlocalmaxima(arr)
+    peaks = Int[]
+    for i in 2:length(arr)-1
+        if arr[i] > arr[i-1] && arr[i] > arr[i+1]
+            push!(peaks, i)
         end
-        row = totalH[idx, :]
-        for z in row
-            # Change from %8.6f to %10.8f to see more decimal places
-            sa = sa * @sprintf("%10.8f %+10.8fim  ", real(z), imag(z))
-        end
-        println(sa)
     end
-    println(stream, " ")
-    return nothing
+    return peaks
+end
+
+
+
+"""
+Simple RK4 integrator for Liouville-von Neumann equation
+No external dependencies needed!
+"""
+function rk4_liouville!(dρdt_func, ρ0, tspan, dt; save_every=1)
+    t_start, t_end = tspan
+    n_steps = Int(ceil((t_end - t_start) / dt))
+
+    # Store results
+    times = Float64[t_start]
+    ρ_vecs = [vec(ρ0)]
+
+    ρ = copy(ρ0)
+    t = t_start
+    step_count = 0
+
+    for step in 1:n_steps
+        # RK4 coefficients
+        k1 = dρdt_func(ρ, nothing, t)
+        k2 = dρdt_func(ρ + dt/2 * reshape(k1, size(ρ)), nothing, t + dt/2)
+        k3 = dρdt_func(ρ + dt/2 * reshape(k2, size(ρ)), nothing, t + dt/2)
+        k4 = dρdt_func(ρ + dt * reshape(k3, size(ρ)), nothing, t + dt)
+
+        # Update
+        ρ += dt/6 * (reshape(k1, size(ρ)) + 2*reshape(k2, size(ρ)) +
+                     2*reshape(k3, size(ρ)) + reshape(k4, size(ρ)))
+        t += dt
+        step_count += 1
+
+        # Save every N steps to reduce memory
+        if step_count % save_every == 0 || step == n_steps
+            push!(times, t)
+            push!(ρ_vecs, vec(ρ))
+        end
+    end
+
+    return times, ρ_vecs
+end
+
+
+function liouville_derivative(ρ_vec, p, t)
+    n = Int(round(sqrt(length(ρ_vec))))
+    ρ = reshape(ρ_vec, n, n)
+    H = H_total(t)
+    dρ = -im * (H * ρ - ρ * H)
+    return vec(dρ)
 end
 
 
