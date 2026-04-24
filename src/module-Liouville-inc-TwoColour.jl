@@ -326,6 +326,40 @@ function computeInteractionMatrix(scheme::TwoColourScheme, levels::Array{TwoColo
     return couplingHM
 end
 
+"""
+`Liouville.displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
+                                     couplingHM::Array{Function, 2})`
+    ... Display the Hamiltonian matrices at a sample time t=0.1.
+"""
+function displayGenericHamiltonian(stream, levels::Array{TwoColourLevel,1}, atomicHM::Matrix{ComplexF64},
+                                   couplingHM::Array{Function, 2})
+    noLevels = length(levels)
+    t = 0.0
+
+    totalHamiltonian = [t -> couplingHM[i,j](t) + atomicHM[i,j] for i in 1:noLevels, j in 1:noLevels]
+    totalH = [f(t) for f in totalHamiltonian]
+
+    println(stream, " ")
+    println(stream, "  Two-Color Hamiltonian matrix (atomic + coupling), evaluated for t=$t:")
+    println(stream, " ")
+    for (idx, level) in enumerate(levels)
+        sa = "       " * string(idx) * ")  "
+        sa = sa * string(level.leadingConfig) * "   "
+        sa = sa * string(level.leadingNotation) * "                          "
+        # Safe truncation
+        if length(sa) >= 70
+            sa = sa[1:70]
+        end
+        row = totalH[idx, :]
+        for z in row
+            sa = sa * @sprintf("%10.8f %+10.8fim  ", real(z), imag(z))
+        end
+        println(sa)
+    end
+    println(stream, " ")
+    return nothing
+end
+
 
 """
 `Liouville.perform(scheme::TwoColourScheme, computation::Computation; output::Bool=true)`
@@ -386,7 +420,7 @@ function perform(scheme::TwoColourScheme, computation::Computation; output::Bool
         displayDensityMatrix(stdout, levels, ρ0)
         println("\nHamiltonian at t=0:")
         H0 = H_total(0.0)
-        displayHamiltonian(stdout, levels, H0)
+        displayGenericHamiltonian(stdout, levels, atomicHM, couplingHM)
     end
 
     # Define Liouville-von Neumann equation: dρ/dt = -i[H, ρ]
