@@ -1,7 +1,7 @@
 name = "JenaAtomicCalculator"
 uuid = "830ae420-d14d-11e8-2f94-6b071437414d"
-authors = ["Stephan Fritzsche <s.fritzsche@gsi.de>"]
 version = "0.3.0"
+authors = ["Stephan Fritzsche <s.fritzsche@gsi.de>"]
 
 [deps]
 BSplineKit = "093aae92-e908-43d7-9660-e50ee39d5a0a"
@@ -48,7 +48,7 @@ IJulia = "1.27"
 JLD2 = "0.5"
 MacroTools = "0.5"
 Plots = "1.40"
-Pluto = "0.20"
+Pluto = "0.20, 1"
 ProgressMeter = "1.10"
 QuadGK = "2.11"
 RecipesBase = "1.3"
